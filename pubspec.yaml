@@ -22,6 +22,7 @@ dependencies:
   printing: ^5.12.0
   supabase_flutter: ^2.12.0
   image_picker: ^1.0.0
+  app_links: ^6.4.1   # handles deep links
 
 dev_dependencies:
   flutter_test:

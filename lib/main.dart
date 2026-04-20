@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'screens/auth_wrapper.dart';
+
 
 
 void main() async{
@@ -22,7 +24,7 @@ class MyApp extends StatelessWidget {
       title: 'CollabEdu',
       theme: classroomTheme,
       debugShowCheckedModeBanner: false,
-      home: const DashboardScreen(),
+      home: const AuthWrapper(),
     );
   }
 }
