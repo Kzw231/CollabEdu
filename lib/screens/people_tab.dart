@@ -69,7 +69,11 @@ class _PeopleTabState extends State<PeopleTab> {
     final project = _currentProject;
     if (project == null) return;
     final gen = ++_loadGen;
-    setState(() => _loadingMembers = true);
+    // ✅ 立即清空旧数据并显示加载状态
+    setState(() {
+      _rows = [];
+      _loadingMembers = true;
+    });
     try {
       final links = await Supabase.instance.client
           .from('project_members')
@@ -78,7 +82,9 @@ class _PeopleTabState extends State<PeopleTab> {
       final list = links as List<dynamic>;
       final ids = list.map<String>((e) => e['member_id'] as String).toList();
       if (ids.isEmpty) {
-        if (mounted && gen == _loadGen) setState(() => _rows = []);
+        if (mounted && gen == _loadGen) {
+          setState(() => _loadingMembers = false);
+        }
         return;
       }
       final members = await Supabase.instance.client
@@ -107,16 +113,19 @@ class _PeopleTabState extends State<PeopleTab> {
         if (aYou != bYou) return aYou.compareTo(bYou);
         return a.name.compareTo(b.name);
       });
-      if (mounted && gen == _loadGen) setState(() => _rows = rows);
+      if (mounted && gen == _loadGen) {
+        setState(() {
+          _rows = rows;
+          _loadingMembers = false;
+        });
+      }
     } catch (e) {
       if (mounted && gen == _loadGen) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not load members: $e')),
         );
-        setState(() => _rows = []);
+        setState(() => _loadingMembers = false);
       }
-    } finally {
-      if (mounted && gen == _loadGen) setState(() => _loadingMembers = false);
     }
   }
 
@@ -132,7 +141,7 @@ class _PeopleTabState extends State<PeopleTab> {
           children: [
             const Text(
               'Look up someone already in the members directory. Use their '
-              'email (exact match) or member ID (e.g. M0001).',
+                  'email (exact match) or member ID (e.g. M0001).',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -241,12 +250,14 @@ class _PeopleTabState extends State<PeopleTab> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: ProjectSelector(
+              key: ValueKey(currentProject.id),
               projects: widget.projects,
               selectedProject: currentProject,
               onChanged: (p) {
                 setState(() => _selectedProject = p);
                 _loadMembersForCurrent();
               },
+              memberCount: _rows.length,
             ),
           ),
           Padding(

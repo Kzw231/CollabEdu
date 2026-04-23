@@ -4,12 +4,17 @@ import '../widgets/empty_state.dart';
 import '../widgets/project_selector.dart';
 import 'file_screen.dart';
 
-/// Files are always scoped to a **real** project. Create a project on Stream/Work first.
 class FilesTab extends StatefulWidget {
   final List<Project> projects;
   final Future<void> Function() onRefresh;
+  final int Function(Project) getMemberCount;
 
-  const FilesTab({super.key, required this.projects, required this.onRefresh});
+  const FilesTab({
+    super.key,
+    required this.projects,
+    required this.onRefresh,
+    required this.getMemberCount,
+  });
 
   @override
   State<FilesTab> createState() => _FilesTabState();
@@ -52,7 +57,7 @@ class _FilesTabState extends State<FilesTab> {
                 icon: Icons.folder_outlined,
                 title: 'Create a project first',
                 subtitle:
-                    'Files are stored per project. On Stream or Work, tap “Create project”, then open Files again.',
+                'Files are stored per project. On Stream or Work, tap "Create project", then open Files again.',
               ),
             ),
           ],
@@ -61,6 +66,7 @@ class _FilesTabState extends State<FilesTab> {
     }
 
     final project = _selected ?? widget.projects.first;
+    final memberCount = widget.getMemberCount(project);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,12 +74,14 @@ class _FilesTabState extends State<FilesTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: ProjectSelector(
+            key: ValueKey(project.id),
             projects: widget.projects,
             selectedProject: project,
             hint: 'Project for files',
             onChanged: (p) {
               if (p != null) setState(() => _selected = p);
             },
+            memberCount: memberCount,
           ),
         ),
         Expanded(

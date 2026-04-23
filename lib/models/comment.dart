@@ -13,6 +13,26 @@ class Comment {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'task_id': taskId,
+      'author': author,
+      'content': content,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
+  factory Comment.fromJson(Map<String, dynamic> json) {
+    return Comment(
+      id: json['id'] as String,
+      taskId: json['task_id'] as String,
+      author: json['author'] as String,
+      content: json['content'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

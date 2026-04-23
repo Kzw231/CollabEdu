@@ -6,6 +6,7 @@ class ProjectSelector extends StatelessWidget {
   final Project? selectedProject;
   final ValueChanged<Project?> onChanged;
   final String hint;
+  final int? memberCount;
 
   const ProjectSelector({
     super.key,
@@ -13,6 +14,7 @@ class ProjectSelector extends StatelessWidget {
     required this.selectedProject,
     required this.onChanged,
     this.hint = 'Select project',
+    this.memberCount,
   });
 
   @override
@@ -26,7 +28,8 @@ class ProjectSelector extends StatelessWidget {
             children: [
               Icon(Icons.folder_outlined, color: Colors.grey.shade600),
               const SizedBox(width: 12),
-              Text('No projects available', style: TextStyle(color: Colors.grey.shade600)),
+              Text('No projects available',
+                  style: TextStyle(color: Colors.grey.shade600)),
             ],
           ),
         ),
@@ -54,13 +57,16 @@ class ProjectSelector extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: selectedProject != null ? Colors.black87 : Colors.grey.shade600,
+                        color: selectedProject != null
+                            ? Colors.black87
+                            : Colors.grey.shade600,
                       ),
                     ),
                     if (selectedProject != null)
                       Text(
-                        '${selectedProject!.members.length} members • Deadline: ${_formatDate(selectedProject!.deadline)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        '${memberCount ?? 0} members • Deadline: ${_formatDate(selectedProject!.deadline)}',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600),
                       ),
                   ],
                 ),
@@ -89,7 +95,11 @@ class ProjectSelector extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
-                    Text('Select Project', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
+                    Text('Select Project',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -108,12 +118,22 @@ class ProjectSelector extends StatelessWidget {
                     final isSelected = selectedProject?.id == project.id;
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: isSelected ? Colors.green : Colors.grey.shade200,
-                        child: Icon(Icons.folder, color: isSelected ? Colors.white : Colors.grey.shade700, size: 20),
+                        backgroundColor:
+                        isSelected ? Colors.green : Colors.grey.shade200,
+                        child: Icon(Icons.folder,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.grey.shade700,
+                            size: 20),
                       ),
-                      title: Text(project.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                      subtitle: Text('${project.members.length} members'),
-                      trailing: isSelected ? const Icon(Icons.check, color: Colors.green) : null,
+                      title: Text(project.name,
+                          style: TextStyle(
+                              fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal)),
+                      subtitle: Text('${memberCount ?? 0} members'),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: Colors.green)
+                          : null,
                       onTap: () {
                         onChanged(project);
                         Navigator.pop(ctx);
