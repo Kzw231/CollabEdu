@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/current_user.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:open_file/open_file.dart';
 
 class FileScreen extends StatefulWidget {
   final String projectId;
@@ -87,6 +89,16 @@ class _FileScreenState extends State<FileScreen> {
     }
   }
 
+  Future<void> _pickAnyFile() async {   ////////
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+    if (result != null) {
+      final file = File(result.files.single.path!);
+      final fileName = result.files.single.name;
+      final mimeType = result.files.single.extension ?? 'application/octet-stream';
+      await _uploadFile(file, fileName, mimeType);
+    }
+  }
+
   Future<void> _pickImageFromCamera() async {
     final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
     if (photo != null) {
@@ -112,7 +124,8 @@ class _FileScreenState extends State<FileScreen> {
       final dir = await getApplicationDocumentsDirectory();
       final localFile = File('${dir.path}/$fileName');
       await localFile.writeAsBytes(bytes);
-      _showSnackBar('Downloaded to ${localFile.path}');
+      await OpenFile.open(localFile.path); //  open the file
+      _showSnackBar('Downloaded to ${localFile.path} and opened');
     } catch (e) {
       _showSnackBar('Download failed: $e');
     }
@@ -153,6 +166,31 @@ class _FileScreenState extends State<FileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  // helper to format the upload date/time
+  String _formatDateTime(dynamic dateTimeValue) {
+    if (dateTimeValue == null) return '';
+    try {
+      DateTime dateTime;
+      if (dateTimeValue is String) {
+        dateTime = DateTime.parse(dateTimeValue);
+      } else if (dateTimeValue is DateTime) {
+        dateTime = dateTimeValue;
+      } else {
+        return '';
+      }
+      // Example: 23 Apr 2025, 14:30
+      return '${_monthAbbr(dateTime.month)} ${dateTime.day}, ${dateTime.year} • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  String _monthAbbr(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  //  ///////////
   Widget _fabColumn() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -167,6 +205,12 @@ class _FileScreenState extends State<FileScreen> {
           heroTag: 'file_gallery_${widget.projectId}',
           onPressed: _pickImageFromGallery,
           child: const Icon(Icons.photo_library),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton(
+          heroTag: 'file_document_${widget.projectId}',
+          onPressed: _pickAnyFile,
+          child: const Icon(Icons.insert_drive_file),
         ),
       ],
     );
@@ -196,11 +240,23 @@ class _FileScreenState extends State<FileScreen> {
         itemBuilder: (ctx, index) {
           final file = _files[index];
           final isImage = file['mime_type']?.startsWith('image/') ?? false;
+          final fileSize = ((file['file_size'] as num?)?.toDouble() ?? 0) / 1024;
+          final uploadDate = _formatDateTime(file['uploaded_at']);
+
           return ListTile(
             leading: isImage ? const Icon(Icons.image) : const Icon(Icons.insert_drive_file),
             title: Text(file['file_name'] as String? ?? ''),
-            subtitle: Text(
-              '${((file['file_size'] as num?)?.toDouble() ?? 0) / 1024} KB',
+            subtitle: Row(
+              children: [
+                Text('${fileSize.toStringAsFixed(1)} KB'),
+                if (uploadDate.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Text(
+                    uploadDate,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
+              ],
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
