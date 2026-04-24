@@ -10,8 +10,7 @@ class StreamTab extends StatefulWidget {
   final List<Project> projects;
   final List<Task> tasks;
   final Function(Project) onProjectTap;
-  final Function(Project) onProjectLongPress;
-  final Function(Project) onProjectDoubleTap;
+  final Function(Project) onProjectEdit;      // 改名：改为编辑，原onProjectDoubleTap
   final Future<void> Function() onRefresh;
   final int Function(Project) getMemberCount;
 
@@ -20,8 +19,7 @@ class StreamTab extends StatefulWidget {
     required this.projects,
     required this.tasks,
     required this.onProjectTap,
-    required this.onProjectLongPress,
-    required this.onProjectDoubleTap,
+    required this.onProjectEdit,
     required this.onRefresh,
     required this.getMemberCount,
   });
@@ -156,8 +154,7 @@ class _StreamTabState extends State<StreamTab> {
                   progress: _getProgress(p),
                   memberCount: widget.getMemberCount(p),
                   onTap: () => widget.onProjectTap(p),
-                  onLongPress: () => widget.onProjectLongPress(p),
-                  onDoubleTap: () => widget.onProjectDoubleTap(p),
+                  onEdit: () => widget.onProjectEdit(p),
                 )),
               const Divider(height: 32, thickness: 1),
               if (todayTasks.isNotEmpty) ...[
@@ -273,7 +270,8 @@ class _StreamTaskCard extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: isSubtask
-            ? Icon(Icons.subdirectory_arrow_right, color: AppColors.textSecondary)
+            ? Icon(Icons.subdirectory_arrow_right,
+            color: AppColors.textSecondary)
             : Icon(
           task.isCompleted ? Icons.check_circle : Icons.circle_outlined,
           color: task.isCompleted ? AppColors.success : AppColors.warning,
@@ -305,7 +303,8 @@ class _StreamTaskCard extends StatelessWidget {
             if (isSubtask && parentTitle != null)
               Text(
                 '📌 Sub of: $parentTitle',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style:
+                TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             Text(
               isSubtask
@@ -338,16 +337,14 @@ class _ProjectCard extends StatelessWidget {
   final double progress;
   final int memberCount;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final VoidCallback onDoubleTap;
+  final VoidCallback onEdit;
 
   const _ProjectCard({
     required this.project,
     required this.progress,
     required this.memberCount,
     required this.onTap,
-    required this.onLongPress,
-    required this.onDoubleTap,
+    required this.onEdit,
   });
 
   String _formatDate(DateTime date) {
@@ -361,8 +358,6 @@ class _ProjectCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      onLongPress: onLongPress,
-      onDoubleTap: onDoubleTap,
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -382,6 +377,12 @@ class _ProjectCard extends StatelessWidget {
                             : AppColors.textPrimary,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 20, color: AppColors.textSecondary),
+                    onPressed: onEdit,
+                    tooltip: 'Edit project',
                   ),
                   Icon(Icons.folder_outlined, color: AppColors.primary),
                 ],
