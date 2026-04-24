@@ -79,7 +79,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .from('project_members')
           .select('project_id')
           .eq('member_id', CurrentUser.memberId!);
-      final projectIds = memberProjects.map<String>((row) => row['project_id']).toList();
+      final projectIds =
+      memberProjects.map<String>((row) => row['project_id']).toList();
 
       if (projectIds.isEmpty) {
         setState(() {
@@ -95,7 +96,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .from('projects')
           .select('*')
           .inFilter('id', projectIds);
-      projects = projectsData.map((json) => Project.fromJson(json)).toList();
+      projects =
+          projectsData.map((json) => Project.fromJson(json)).toList();
 
       for (final project in projects) {
         final countResp = await _supabase
@@ -151,7 +153,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .from('files')
           .select('storage_path')
           .eq('project_id', project.id);
-      final paths = (filesResp as List).map((f) => f['storage_path'] as String).toList();
+      final paths = (filesResp as List)
+          .map((f) => f['storage_path'] as String)
+          .toList();
       if (paths.isNotEmpty) {
         await _supabase.storage.from('project_files').remove(paths);
       }
@@ -177,7 +181,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _syncProjectMembers(String projectId, List<String> memberIds) async {
+  Future<void> _syncProjectMembers(
+      String projectId, List<String> memberIds) async {
     final desired = memberIds.toSet();
     final me = CurrentUser.memberId;
     if (me != null) desired.add(me);
@@ -186,7 +191,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .from('project_members')
         .select('member_id')
         .eq('project_id', projectId);
-    final existing = (rows as List).map((e) => e['member_id'] as String).toSet();
+    final existing =
+    (rows as List).map((e) => e['member_id'] as String).toSet();
 
     for (final id in desired.difference(existing)) {
       await _supabase.from('project_members').insert({
@@ -255,7 +261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _navigateToProjectDetail(Project project) async {
-    await Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProjectDetailScreen(
@@ -265,6 +271,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+    if (result == 'edit') {
+      await editProject(project);
+    } else if (result == 'delete') {
+      await _loadData();
+    }
   }
 
   Future<void> _createProject() async {
@@ -300,16 +311,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           projectRow['created_by'] = CurrentUser.memberId;
         }
 
-        final inserted = await _supabase.from('projects').insert(projectRow).select();
+        final inserted =
+        await _supabase.from('projects').insert(projectRow).select();
         final createdProject = Project.fromJson(inserted.first);
 
-        for (final mid in memberIds) {
-          await _supabase.from('project_members').insert({
-            'project_id': createdProject.id,
-            'member_id': mid,
-            'role': mid == CurrentUser.memberId ? 'admin' : 'member',
-          });
-        }
+        // 批量插入成员
+        final memberRows = memberIds.map((mid) => {
+          'project_id': createdProject.id,
+          'member_id': mid,
+          'role': mid == CurrentUser.memberId ? 'admin' : 'member',
+        }).toList();
+        await _supabase.from('project_members').insert(memberRows);
 
         if (mounted) {
           setState(() {
@@ -355,8 +367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         projects: projects,
         tasks: tasks,
         onProjectTap: _navigateToProjectDetail,
-        onProjectLongPress: deleteProject,
-        onProjectDoubleTap: editProject,
+        onProjectEdit: editProject,          // 改为编辑
         onRefresh: _loadData,
         getMemberCount: getProjectMemberCount,
       ),
