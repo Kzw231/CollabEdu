@@ -24,7 +24,8 @@ class GradesTab extends StatefulWidget {
   State<GradesTab> createState() => _GradesTabState();
 }
 
-class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMixin {
+class _GradesTabState extends State<GradesTab>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Project? _selectedProject;
   final _supabase = Supabase.instance.client;
@@ -53,7 +54,8 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
           .from('project_members')
           .select('member_id')
           .eq('project_id', projectId);
-      final ids = (links as List).map((e) => e['member_id'] as String).toList();
+      final ids =
+      (links as List).map((e) => e['member_id'] as String).toList();
       if (ids.isEmpty) {
         setState(() => _memberNames.clear());
         return;
@@ -77,7 +79,9 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
 
   List<Task> get projectTasks => _selectedProject == null
       ? []
-      : widget.tasks.where((t) => t.projectId == _selectedProject!.id).toList();
+      : widget.tasks
+      .where((t) => t.projectId == _selectedProject!.id)
+      .toList();
 
   List<String> get memberIds => _memberNames.keys.toList();
 
@@ -160,7 +164,9 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
       children: [
         Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+          shape: RoundedRectangleBorder(
+              borderRadius:
+              BorderRadius.circular(AppBorderRadius.large)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -168,15 +174,22 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
               children: [
                 Row(
                   children: [
-                    const Text('Project Health', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                    const Text('Project Health',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600)),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                           color: _getHealthColor(healthScore),
-                          borderRadius: BorderRadius.circular(20)),
+                          borderRadius:
+                          BorderRadius.circular(20)),
                       child: Text('$healthScore%',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -195,12 +208,17 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
         const SizedBox(height: 16),
         Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+          shape: RoundedRectangleBorder(
+              borderRadius:
+              BorderRadius.circular(AppBorderRadius.large)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                const Text('Overall Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Text('Overall Progress',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 16),
                 SizedBox(
                   height: 150,
@@ -212,22 +230,32 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
                         PieChartSectionData(
                             value: completed.toDouble(),
                             color: AppColors.success,
-                            title: completed > 0 ? '$completed' : '',
+                            title: completed > 0
+                                ? '$completed'
+                                : '',
                             radius: 50,
                             titleStyle: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
                         PieChartSectionData(
-                            value: (total - completed).toDouble(),
+                            value:
+                            (total - completed).toDouble(),
                             color: AppColors.divider,
-                            title: (total - completed) > 0 ? '${total - completed}' : '',
+                            title: (total - completed) > 0
+                                ? '${total - completed}'
+                                : '',
                             radius: 45,
-                            titleStyle: const TextStyle(fontSize: 14, color: Colors.black54)),
+                            titleStyle: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black54)),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('$completed of $total tasks completed (${(progress * 100).toInt()}%)'),
+                Text(
+                    '$completed of $total tasks completed (${(progress * 100).toInt()}%)'),
               ],
             ),
           ),
@@ -235,18 +263,24 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
         const SizedBox(height: 16),
         Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+          shape: RoundedRectangleBorder(
+              borderRadius:
+              BorderRadius.circular(AppBorderRadius.large)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Member Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Text('Member Progress',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 if (memberIds.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('No members in this project'),
+                    child:
+                    Text('No members in this project'),
                   )
                 else
                   SingleChildScrollView(
@@ -258,23 +292,37 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
                         DataColumn(label: Text('Progress')),
                       ],
                       rows: memberIds.map((memberId) {
-                        final memberName = _memberNames[memberId] ?? memberId;
-                        final memberTasks = tasks.where((t) => t.assignedTo == memberId).toList();
-                        final memberCompleted = memberTasks.where((t) => t.isCompleted).length;
-                        final percentage = memberTasks.isEmpty ? 0.0 : memberCompleted / memberTasks.length;
+                        final memberName =
+                            _memberNames[memberId] ?? memberId;
+                        final memberTasks = tasks
+                            .where((t) =>
+                        t.assignedTo == memberId)
+                            .toList();
+                        final memberCompleted = memberTasks
+                            .where((t) => t.isCompleted)
+                            .length;
+                        final percentage = memberTasks.isEmpty
+                            ? 0.0
+                            : memberCompleted /
+                            memberTasks.length;
                         return DataRow(cells: [
                           DataCell(Text(memberName)),
-                          DataCell(Text('$memberCompleted/${memberTasks.length}')),
+                          DataCell(Text(
+                              '$memberCompleted/${memberTasks.length}')),
                           DataCell(SizedBox(
                               width: 120,
                               child: Row(children: [
                                 Expanded(
-                                    child: LinearProgressIndicator(
-                                        value: percentage,
-                                        backgroundColor: AppColors.divider,
-                                        color: AppColors.primary)),
+                                    child:
+                                    LinearProgressIndicator(
+                                      value: percentage,
+                                      backgroundColor:
+                                      AppColors.divider,
+                                      color: AppColors.primary,
+                                    )),
                                 const SizedBox(width: 8),
-                                Text('${(percentage * 100).toInt()}%')
+                                Text(
+                                    '${(percentage * 100).toInt()}%')
                               ]))),
                         ]);
                       }).toList(),
@@ -290,19 +338,27 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
 
   Widget _buildBurndownTab() {
     final tasks = projectTasks;
-    if (tasks.isEmpty) return const Center(child: Text('No tasks to display burndown chart'));
+    if (tasks.isEmpty)
+      return const Center(
+          child: Text('No tasks to display burndown chart'));
 
     final now = DateTime.now();
-    final startDate = tasks.map((t) => t.startDate).reduce((a, b) => a.isBefore(b) ? a : b);
-    final endDate = tasks.map((t) => t.deadline).reduce((a, b) => a.isAfter(b) ? a : b);
+    final startDate = tasks
+        .map((t) => t.startDate)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final endDate = tasks
+        .map((t) => t.deadline)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
     final totalDays = endDate.difference(startDate).inDays + 1;
 
     final idealRemaining = <FlSpot>[];
-    final totalEstimate = tasks.fold<int>(0, (sum, t) => sum + t.estimatedHours);
+    final totalEstimate =
+    tasks.fold<int>(0, (sum, t) => sum + t.estimatedHours);
     for (int i = 0; i <= totalDays; i++) {
       final day = startDate.add(Duration(days: i));
       if (day.isAfter(now)) break;
-      idealRemaining.add(FlSpot(i.toDouble(), totalEstimate * (1 - i / totalDays)));
+      idealRemaining.add(
+          FlSpot(i.toDouble(), totalEstimate * (1 - i / totalDays)));
     }
 
     final actualRemaining = <FlSpot>[];
@@ -311,10 +367,15 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
       if (day.isAfter(now)) break;
       int remaining = 0;
       for (var task in tasks) {
-        if (task.deadline.isBefore(day) || task.startDate.isAfter(day)) continue;
-        remaining += (task.estimatedHours * (100 - task.progressPercent) / 100).round();
+        if (task.deadline.isBefore(day) ||
+            task.startDate.isAfter(day)) continue;
+        remaining += (task.estimatedHours *
+            (100 - task.progressPercent) /
+            100)
+            .round();
       }
-      actualRemaining.add(FlSpot(i.toDouble(), remaining.toDouble()));
+      actualRemaining
+          .add(FlSpot(i.toDouble(), remaining.toDouble()));
     }
 
     return SingleChildScrollView(
@@ -322,49 +383,73 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
       padding: const EdgeInsets.all(16),
       child: Card(
         elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+        shape: RoundedRectangleBorder(
+            borderRadius:
+            BorderRadius.circular(AppBorderRadius.large)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Burndown Chart', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              const Text('Burndown Chart',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Row(children: [
-                Container(width: 12, height: 12, color: AppColors.textSecondary),
+                Container(
+                    width: 12,
+                    height: 12,
+                    color: AppColors.textSecondary),
                 const SizedBox(width: 4),
-                const Text('Ideal', style: TextStyle(fontSize: 12)),
+                const Text('Ideal',
+                    style: TextStyle(fontSize: 12)),
                 const SizedBox(width: 16),
-                Container(width: 12, height: 12, color: AppColors.error),
+                Container(
+                    width: 12,
+                    height: 12,
+                    color: AppColors.error),
                 const SizedBox(width: 4),
-                const Text('Actual', style: TextStyle(fontSize: 12))
+                const Text('Actual',
+                    style: TextStyle(fontSize: 12))
               ]),
               const SizedBox(height: 16),
               SizedBox(
                 height: 250,
                 child: LineChart(
                   LineChartData(
-                    gridData: FlGridData(show: true, drawVerticalLine: false),
+                    gridData: FlGridData(
+                        show: true, drawVerticalLine: false),
                     titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+                      leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 40)),
                       bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                               showTitles: true,
-                              getTitlesWidget: (value, meta) => Text(
-                                  DateFormat.MMMd().format(startDate.add(Duration(days: value.toInt()))),
-                                  style: const TextStyle(fontSize: 10)))),
+                              getTitlesWidget: (value, meta) =>
+                                  Text(
+                                      DateFormat.MMMd().format(
+                                          startDate.add(Duration(
+                                              days: value
+                                                  .toInt()))),
+                                      style: const TextStyle(
+                                          fontSize: 10)))),
                     ),
                     lineBarsData: [
                       LineChartBarData(
                           spots: idealRemaining,
                           color: AppColors.textSecondary,
-                          dotData: const FlDotData(show: false),
+                          dotData:
+                          const FlDotData(show: false),
                           barWidth: 2,
                           dashArray: [5, 5]),
                       LineChartBarData(
                           spots: actualRemaining,
                           color: AppColors.error,
-                          dotData: const FlDotData(show: true),
+                          dotData:
+                          const FlDotData(show: true),
                           barWidth: 3),
                     ],
                     minY: 0,
@@ -380,11 +465,14 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
 
   Widget _buildWorkloadTab() {
     final tasks = projectTasks;
-    if (memberIds.isEmpty) return const Center(child: Text('No members in this project'));
+    if (memberIds.isEmpty)
+      return const Center(
+          child: Text('No members in this project'));
 
     final memberTasksCount = <String, int>{};
     for (var memberId in memberIds) {
-      memberTasksCount[memberId] = tasks.where((t) => t.assignedTo == memberId).length;
+      memberTasksCount[memberId] =
+          tasks.where((t) => t.assignedTo == memberId).length;
     }
 
     final sorted = memberTasksCount.entries.toList()
@@ -405,12 +493,21 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        const Icon(Icons.work, color: AppColors.error),
+                        const Icon(Icons.work,
+                            color: AppColors.error),
                         const SizedBox(height: 8),
-                        Text('Busiest', style: TextStyle(color: AppColors.textSecondary)),
-                        Text(_memberNames[busiest?.key] ?? 'N/A',
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('${busiest?.value ?? 0} tasks'),
+                        Text('Busiest',
+                            style: TextStyle(
+                                color:
+                                AppColors.textSecondary)),
+                        Text(
+                            _memberNames[busiest?.key] ??
+                                'N/A',
+                            style: const TextStyle(
+                                fontWeight:
+                                FontWeight.bold)),
+                        Text(
+                            '${busiest?.value ?? 0} tasks'),
                       ],
                     ),
                   ),
@@ -423,12 +520,22 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        const Icon(Icons.beach_access, color: AppColors.success),
+                        const Icon(Icons.beach_access,
+                            color: AppColors.success),
                         const SizedBox(height: 8),
-                        Text('Lightest', style: TextStyle(color: AppColors.textSecondary)),
-                        Text(_memberNames[lightest?.key] ?? 'N/A',
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('${lightest?.value ?? 0} tasks'),
+                        Text('Lightest',
+                            style: TextStyle(
+                                color:
+                                AppColors.textSecondary)),
+                        Text(
+                            _memberNames[
+                            lightest?.key] ??
+                                'N/A',
+                            style: const TextStyle(
+                                fontWeight:
+                                FontWeight.bold)),
+                        Text(
+                            '${lightest?.value ?? 0} tasks'),
                       ],
                     ),
                   ),
@@ -439,13 +546,18 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
           const SizedBox(height: 16),
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+            shape: RoundedRectangleBorder(
+                borderRadius:
+                BorderRadius.circular(AppBorderRadius.large)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Member Workload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const Text('Member Workload',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 250,
@@ -454,38 +566,66 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
                         alignment: BarChartAlignment.spaceAround,
                         maxY: memberTasksCount.values.isEmpty
                             ? 1
-                            : memberTasksCount.values.reduce((a, b) => a > b ? a : b).toDouble() + 1,
+                            : memberTasksCount.values
+                            .reduce((a, b) =>
+                        a > b ? a : b)
+                            .toDouble() +
+                            1,
                         titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                          leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                  showTitles: true)),
                           bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                   showTitles: true,
-                                  getTitlesWidget: (value, meta) {
-                                    final index = value.toInt();
-                                    if (index < memberIds.length) {
-                                      final name = _memberNames[memberIds[index]] ?? memberIds[index];
+                                  getTitlesWidget:
+                                      (value, meta) {
+                                    final index =
+                                    value.toInt();
+                                    if (index <
+                                        memberIds.length) {
+                                      final name = _memberNames[
+                                      memberIds[
+                                      index]] ??
+                                          memberIds[
+                                          index];
                                       return Padding(
-                                        padding: const EdgeInsets.only(top: 8),
+                                        padding:
+                                        const EdgeInsets
+                                            .only(top: 8),
                                         child: Text(
-                                          name.length > 6 ? '${name.substring(0, 6)}…' : name,
-                                          style: const TextStyle(fontSize: 10),
+                                          name.length > 6
+                                              ? '${name.substring(0, 6)}…'
+                                              : name,
+                                          style: const TextStyle(
+                                              fontSize: 10),
                                         ),
                                       );
                                     }
                                     return const Text('');
                                   })),
                         ),
-                        barGroups: memberIds.asMap().entries.map((entry) {
+                        barGroups: memberIds
+                            .asMap()
+                            .entries
+                            .map((entry) {
                           final index = entry.key;
                           final memberId = entry.value;
                           return BarChartGroupData(
                             x: index,
                             barRods: [
                               BarChartRodData(
-                                toY: (memberTasksCount[memberId] ?? 0).toDouble(),
+                                toY: (memberTasksCount[
+                                memberId] ??
+                                    0)
+                                    .toDouble(),
                                 color: AppColors.info,
                                 width: 20,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                borderRadius:
+                                const BorderRadius.vertical(
+                                    top:
+                                    Radius.circular(
+                                        4)),
                               ),
                             ],
                           );
@@ -506,14 +646,21 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     if (tasks.isEmpty) return 100;
     int score = 100;
     final now = DateTime.now();
-    score -= tasks.where((t) => !t.isCompleted && t.deadline.isBefore(now)).length * 10;
+    score -= tasks
+        .where((t) =>
+    !t.isCompleted && t.deadline.isBefore(now))
+        .length *
+        10;
     for (var task in tasks) {
       if (task.isCompleted) continue;
-      final totalDuration = task.deadline.difference(task.startDate).inDays;
+      final totalDuration =
+          task.deadline.difference(task.startDate).inDays;
       final elapsed = now.difference(task.startDate).inDays;
       if (totalDuration > 0) {
-        final expectedProgress = (elapsed / totalDuration * 100).clamp(0, 100);
-        if (task.progressPercent < expectedProgress - 20) score -= 5;
+        final expectedProgress =
+        (elapsed / totalDuration * 100).clamp(0, 100);
+        if (task.progressPercent < expectedProgress - 20)
+          score -= 5;
       }
     }
     return score.clamp(0, 100);
