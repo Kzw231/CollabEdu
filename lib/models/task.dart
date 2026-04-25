@@ -1,5 +1,6 @@
-// task
+// task.dart
 enum Priority { low, medium, high }
+enum RiskLevel { none, low, medium, high }
 
 class Task {
   final String id;
@@ -43,8 +44,8 @@ class Task {
 
   int get actualMinutes {
     if (actualStartDate == null) return 0;
-    final end = completedAt ?? DateTime.now();
-    return end.difference(actualStartDate!).inMinutes;
+    if (completedAt == null) return 0;
+    return completedAt!.difference(actualStartDate!).inMinutes;
   }
 
   String get actualTimeDisplay {
@@ -53,6 +54,18 @@ class Task {
     final hours = minutes ~/ 60;
     final mins = minutes % 60;
     return '${hours}h ${mins}m';
+  }
+
+  // ----- Risk level calculation -----
+  RiskLevel get risk {
+    if (isCompleted) return RiskLevel.none;
+    final now = DateTime.now();
+    final daysLeft = deadline.difference(now).inDays;
+    if (daysLeft < 0) return RiskLevel.high;
+    if (daysLeft <= 1) return RiskLevel.high;
+    if (daysLeft <= 3 && progressPercent < 50) return RiskLevel.medium;
+    if (daysLeft <= 7 && progressPercent == 0) return RiskLevel.low;
+    return RiskLevel.none;
   }
 
   static List<String> _parseTags(dynamic v) {
