@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import '../models/project.dart';
 import '../models/task.dart';
 import '../widgets/empty_state.dart';
@@ -12,25 +18,17 @@ class GradesTab extends StatefulWidget {
   final List<Project> projects;
   final List<Task> tasks;
   final Future<void> Function() onRefresh;
-
-  const GradesTab({
-    super.key,
-    required this.projects,
-    required this.tasks,
-    required this.onRefresh,
-  });
-
+  const GradesTab({super.key, required this.projects, required this.tasks, required this.onRefresh});
   @override
   State<GradesTab> createState() => _GradesTabState();
 }
 
-class _GradesTabState extends State<GradesTab>
-    with SingleTickerProviderStateMixin {
+class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Project? _selectedProject;
   final _supabase = Supabase.instance.client;
-
   final Map<String, String> _memberNames = {};
+  DateTimeRange? _dateRange;
 
   @override
   void initState() {
@@ -50,107 +48,142 @@ class _GradesTabState extends State<GradesTab>
 
   Future<void> _loadMembersForProject(String projectId) async {
     try {
-      final links = await _supabase
-          .from('project_members')
-          .select('member_id')
-          .eq('project_id', projectId);
-      final ids =
-      (links as List).map((e) => e['member_id'] as String).toList();
+      final links = await _supabase.from('project_members').select('member_id').eq('project_id', projectId);
+      final ids = (links as List).map((e) => e['member_id'] as String).toList();
       if (ids.isEmpty) {
         setState(() => _memberNames.clear());
         return;
       }
-      final members = await _supabase
-          .from('members')
-          .select('id, name')
-          .inFilter('id', ids);
+      final members = await _supabase.from('members').select('id, name').inFilter('id', ids);
       final map = <String, String>{};
       for (final m in (members as List)) {
         map[m['id']] = m['name'] ?? m['id'];
       }
-      setState(() {
-        _memberNames.clear();
-        _memberNames.addAll(map);
-      });
+      setState(() { _memberNames.clear(); _memberNames.addAll(map); });
     } catch (e) {
       setState(() => _memberNames.clear());
     }
   }
 
-  List<Task> get projectTasks => _selectedProject == null
-      ? []
-      : widget.tasks
-      .where((t) => t.projectId == _selectedProject!.id)
-      .toList();
+  List<Task> get projectTasks {
+    var tasks = _selectedProject == null
+        ? <Task>[]
+        : widget.tasks.where((t) => t.projectId == _selectedProject!.id);
+    if (_dateRange != null) {
+      tasks = tasks.where((t) =>
+      t.createdAt.isAfter(_dateRange!.start) &&
+          t.createdAt.isBefore(_dateRange!.end.add(const Duration(days: 1))));
+    }
+    return tasks.toList();
+  }
 
   List<String> get memberIds => _memberNames.keys.toList();
+
+  // 导出截图方法
+  Future<void> _exportChart(GlobalKey key, String filename) async {
+    try {
+      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$filename.png');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (e) {
+      debugPrint('Export error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     if (widget.projects.isEmpty) {
       return RefreshIndicator(
         onRefresh: widget.onRefresh,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            EmptyState(
-              icon: Icons.grade_outlined,
-              title: 'No projects yet',
-              subtitle: 'Create a project to see analytics',
-            ),
-          ],
-        ),
+        child: ListView(physics: const AlwaysScrollableScrollPhysics(), children: const [
+          EmptyState(icon: Icons.grade_outlined, title: 'No projects yet', subtitle: 'Create a project to see analytics'),
+        ]),
       );
     }
 
     return RefreshIndicator(
       onRefresh: () async {
         await widget.onRefresh();
-        if (_selectedProject != null) {
-          await _loadMembersForProject(_selectedProject!.id);
-        }
+        if (_selectedProject != null) await _loadMembersForProject(_selectedProject!.id);
       },
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ProjectSelector(
-              key: ValueKey(_selectedProject?.id),
-              projects: widget.projects,
-              selectedProject: _selectedProject,
-              onChanged: (p) {
-                setState(() => _selectedProject = p);
-                if (p != null) _loadMembersForProject(p.id);
-              },
-              memberCount: _memberNames.length,
-            ),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: ProjectSelector(
+            key: ValueKey(_selectedProject?.id),
+            projects: widget.projects,
+            selectedProject: _selectedProject,
+            onChanged: (p) { setState(() => _selectedProject = p); if (p != null) _loadMembersForProject(p.id); },
+            memberCount: _memberNames.length,
           ),
-          TabBar(
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.date_range),
+                onPressed: () async {
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (range != null) setState(() => _dateRange = range);
+                },
+                label: Text(_dateRange == null
+                    ? 'All time'
+                    : '${DateFormat.MMMd().format(_dateRange!.start)} - ${DateFormat.MMMd().format(_dateRange!.end)}'),
+              ),
+            ),
+            if (_dateRange != null)
+              IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _dateRange = null)),
+          ]),
+        ),
+        TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicatorColor: AppColors.primary,
+          tabs: const [Tab(text: 'Overview'), Tab(text: 'Burndown'), Tab(text: 'Workload')],
+        ),
+        Expanded(
+          child: TabBarView(
             controller: _tabController,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSecondary,
-            indicatorColor: AppColors.primary,
-            tabs: const [
-              Tab(text: 'Overview'),
-              Tab(text: 'Burndown'),
-              Tab(text: 'Workload'),
+            children: [
+              _buildOverviewTab(),
+              _buildBurndownTab(),
+              _buildWorkloadTab(),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(),
-                _buildBurndownTab(),
-                _buildWorkloadTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
+  // 为图表添加导出按钮
+  Widget _exportableSection(Widget child, String filename, GlobalKey key) {
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.topRight,
+          child: IconButton(
+            icon: Icon(Icons.share, color: AppColors.primary),
+            onPressed: () => _exportChart(key, filename),
+          ),
+        ),
+        RepaintBoundary(key: key, child: child),
+      ],
+    );
+  }
+
+  // ---------- Overview Tab ----------
   Widget _buildOverviewTab() {
     final tasks = projectTasks;
     final completed = tasks.where((t) => t.isCompleted).length;
@@ -158,207 +191,146 @@ class _GradesTabState extends State<GradesTab>
     final progress = total == 0 ? 0.0 : completed / total;
     final healthScore = _calculateHealthScore(tasks);
 
+    Widget overviewCard = Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Project Health', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _getHealthColor(healthScore),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('$healthScore%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            LinearProgressIndicator(
+              value: healthScore / 100,
+              backgroundColor: AppColors.divider,
+              color: _getHealthColor(healthScore),
+              minHeight: 10,
+            ),
+            const SizedBox(height: 8),
+            Text(_getHealthMessage(healthScore)),
+          ],
+        ),
+      ),
+    );
+
+    Widget progressChart = Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('Overall Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 150,
+              child: PieChart(
+                PieChartData(
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 40,
+                  sections: [
+                    PieChartSectionData(value: completed.toDouble(), color: AppColors.success, title: completed > 0 ? '$completed' : '', radius: 50, titleStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    PieChartSectionData(value: (total - completed).toDouble(), color: AppColors.divider, title: (total - completed) > 0 ? '${total - completed}' : '', radius: 45, titleStyle: const TextStyle(fontSize: 14, color: Colors.black54)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('$completed of $total tasks completed (${(progress * 100).toInt()}%)'),
+          ],
+        ),
+      ),
+    );
+
+    Widget memberTable = Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Member Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            if (memberIds.isEmpty)
+              const Padding(padding: EdgeInsets.all(16), child: Text('No members in this project'))
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Member')),
+                    DataColumn(label: Text('Completed')),
+                    DataColumn(label: Text('Progress')),
+                  ],
+                  rows: memberIds.map((memberId) {
+                    final memberName = _memberNames[memberId] ?? memberId;
+                    final memberTasks = tasks.where((t) => t.assignedTo == memberId).toList();
+                    final memberCompleted = memberTasks.where((t) => t.isCompleted).length;
+                    final percentage = memberTasks.isEmpty ? 0.0 : memberCompleted / memberTasks.length;
+                    return DataRow(cells: [
+                      DataCell(Text(memberName)),
+                      DataCell(Text('$memberCompleted/${memberTasks.length}')),
+                      DataCell(SizedBox(
+                        width: 120,
+                        child: Row(children: [
+                          Expanded(child: LinearProgressIndicator(value: percentage, backgroundColor: AppColors.divider, color: AppColors.primary)),
+                          const SizedBox(width: 8),
+                          Text('${(percentage * 100).toInt()}%'),
+                        ]),
+                      )),
+                    ]);
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-              borderRadius:
-              BorderRadius.circular(AppBorderRadius.large)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text('Project Health',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                          color: _getHealthColor(healthScore),
-                          borderRadius:
-                          BorderRadius.circular(20)),
-                      child: Text('$healthScore%',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                    value: healthScore / 100,
-                    backgroundColor: AppColors.divider,
-                    color: _getHealthColor(healthScore),
-                    minHeight: 10),
-                const SizedBox(height: 8),
-                Text(_getHealthMessage(healthScore)),
-              ],
-            ),
-          ),
-        ),
+        _exportableSection(overviewCard, 'health_score', GlobalKey()),
         const SizedBox(height: 16),
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-              borderRadius:
-              BorderRadius.circular(AppBorderRadius.large)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const Text('Overall Progress',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 150,
-                  child: PieChart(
-                    PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 40,
-                      sections: [
-                        PieChartSectionData(
-                            value: completed.toDouble(),
-                            color: AppColors.success,
-                            title: completed > 0
-                                ? '$completed'
-                                : '',
-                            radius: 50,
-                            titleStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white)),
-                        PieChartSectionData(
-                            value:
-                            (total - completed).toDouble(),
-                            color: AppColors.divider,
-                            title: (total - completed) > 0
-                                ? '${total - completed}'
-                                : '',
-                            radius: 45,
-                            titleStyle: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black54)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                    '$completed of $total tasks completed (${(progress * 100).toInt()}%)'),
-              ],
-            ),
-          ),
-        ),
+        _exportableSection(progressChart, 'progress_pie', GlobalKey()),
         const SizedBox(height: 16),
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-              borderRadius:
-              BorderRadius.circular(AppBorderRadius.large)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Member Progress',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                if (memberIds.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child:
-                    Text('No members in this project'),
-                  )
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Member')),
-                        DataColumn(label: Text('Completed')),
-                        DataColumn(label: Text('Progress')),
-                      ],
-                      rows: memberIds.map((memberId) {
-                        final memberName =
-                            _memberNames[memberId] ?? memberId;
-                        final memberTasks = tasks
-                            .where((t) =>
-                        t.assignedTo == memberId)
-                            .toList();
-                        final memberCompleted = memberTasks
-                            .where((t) => t.isCompleted)
-                            .length;
-                        final percentage = memberTasks.isEmpty
-                            ? 0.0
-                            : memberCompleted /
-                            memberTasks.length;
-                        return DataRow(cells: [
-                          DataCell(Text(memberName)),
-                          DataCell(Text(
-                              '$memberCompleted/${memberTasks.length}')),
-                          DataCell(SizedBox(
-                              width: 120,
-                              child: Row(children: [
-                                Expanded(
-                                    child:
-                                    LinearProgressIndicator(
-                                      value: percentage,
-                                      backgroundColor:
-                                      AppColors.divider,
-                                      color: AppColors.primary,
-                                    )),
-                                const SizedBox(width: 8),
-                                Text(
-                                    '${(percentage * 100).toInt()}%')
-                              ]))),
-                        ]);
-                      }).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+        memberTable,
       ],
     );
   }
 
+  // ---------- Burndown Tab ----------
   Widget _buildBurndownTab() {
     final tasks = projectTasks;
-    if (tasks.isEmpty)
-      return const Center(
-          child: Text('No tasks to display burndown chart'));
+    if (tasks.isEmpty) return const Center(child: Text('No tasks to display burndown chart'));
 
     final now = DateTime.now();
-    final startDate = tasks
-        .map((t) => t.startDate)
-        .reduce((a, b) => a.isBefore(b) ? a : b);
-    final endDate = tasks
-        .map((t) => t.deadline)
-        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final startDate = tasks.map((t) => t.startDate).reduce((a, b) => a.isBefore(b) ? a : b);
+    final endDate = tasks.map((t) => t.deadline).reduce((a, b) => a.isAfter(b) ? a : b);
     final totalDays = endDate.difference(startDate).inDays + 1;
 
     final idealRemaining = <FlSpot>[];
-    final totalEstimate =
-    tasks.fold<int>(0, (sum, t) => sum + t.estimatedHours);
+    final totalEstimate = tasks.fold<int>(0, (sum, t) => sum + t.estimatedHours);
     for (int i = 0; i <= totalDays; i++) {
       final day = startDate.add(Duration(days: i));
       if (day.isAfter(now)) break;
-      idealRemaining.add(
-          FlSpot(i.toDouble(), totalEstimate * (1 - i / totalDays)));
+      idealRemaining.add(FlSpot(i.toDouble(), totalEstimate * (1 - i / totalDays)));
     }
 
     final actualRemaining = <FlSpot>[];
@@ -367,118 +339,114 @@ class _GradesTabState extends State<GradesTab>
       if (day.isAfter(now)) break;
       int remaining = 0;
       for (var task in tasks) {
-        if (task.deadline.isBefore(day) ||
-            task.startDate.isAfter(day)) continue;
-        remaining += (task.estimatedHours *
-            (100 - task.progressPercent) /
-            100)
-            .round();
+        if (task.deadline.isBefore(day) || task.startDate.isAfter(day)) continue;
+        remaining += (task.estimatedHours * (100 - task.progressPercent) / 100).round();
       }
-      actualRemaining
-          .add(FlSpot(i.toDouble(), remaining.toDouble()));
+      actualRemaining.add(FlSpot(i.toDouble(), remaining.toDouble()));
     }
+
+    Widget chart = Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Burndown Chart', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Container(width: 12, height: 12, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              const Text('Ideal', style: TextStyle(fontSize: 12)),
+              const SizedBox(width: 16),
+              Container(width: 12, height: 12, color: AppColors.error),
+              const SizedBox(width: 4),
+              const Text('Actual', style: TextStyle(fontSize: 12)),
+            ]),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(show: true, drawVerticalLine: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) => Text(DateFormat.MMMd().format(startDate.add(Duration(days: value.toInt()))), style: const TextStyle(fontSize: 10)))),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(spots: idealRemaining, color: AppColors.textSecondary, dotData: const FlDotData(show: false), barWidth: 2, dashArray: [5, 5]),
+                    LineChartBarData(spots: actualRemaining, color: AppColors.error, dotData: const FlDotData(show: true), barWidth: 3),
+                  ],
+                  minY: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-            borderRadius:
-            BorderRadius.circular(AppBorderRadius.large)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Burndown Chart',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Row(children: [
-                Container(
-                    width: 12,
-                    height: 12,
-                    color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                const Text('Ideal',
-                    style: TextStyle(fontSize: 12)),
-                const SizedBox(width: 16),
-                Container(
-                    width: 12,
-                    height: 12,
-                    color: AppColors.error),
-                const SizedBox(width: 4),
-                const Text('Actual',
-                    style: TextStyle(fontSize: 12))
-              ]),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 250,
-                child: LineChart(
-                  LineChartData(
-                    gridData: FlGridData(
-                        show: true, drawVerticalLine: false),
-                    titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40)),
-                      bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) =>
-                                  Text(
-                                      DateFormat.MMMd().format(
-                                          startDate.add(Duration(
-                                              days: value
-                                                  .toInt()))),
-                                      style: const TextStyle(
-                                          fontSize: 10)))),
-                    ),
-                    lineBarsData: [
-                      LineChartBarData(
-                          spots: idealRemaining,
-                          color: AppColors.textSecondary,
-                          dotData:
-                          const FlDotData(show: false),
-                          barWidth: 2,
-                          dashArray: [5, 5]),
-                      LineChartBarData(
-                          spots: actualRemaining,
-                          color: AppColors.error,
-                          dotData:
-                          const FlDotData(show: true),
-                          barWidth: 3),
-                    ],
-                    minY: 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: _exportableSection(chart, 'burndown_chart', GlobalKey()),
     );
   }
 
+  // ---------- Workload Tab ----------
   Widget _buildWorkloadTab() {
     final tasks = projectTasks;
-    if (memberIds.isEmpty)
-      return const Center(
-          child: Text('No members in this project'));
+    if (memberIds.isEmpty) return const Center(child: Text('No members in this project'));
 
     final memberTasksCount = <String, int>{};
     for (var memberId in memberIds) {
-      memberTasksCount[memberId] =
-          tasks.where((t) => t.assignedTo == memberId).length;
+      memberTasksCount[memberId] = tasks.where((t) => t.assignedTo == memberId).length;
     }
 
-    final sorted = memberTasksCount.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final sorted = memberTasksCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final busiest = sorted.isNotEmpty ? sorted.first : null;
     final lightest = sorted.isNotEmpty ? sorted.last : null;
+
+    Widget workloadBarChart = Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.large)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Member Workload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: memberTasksCount.values.isEmpty ? 1 : memberTasksCount.values.reduce((a, b) => a > b ? a : b).toDouble() + 1,
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      if (index < memberIds.length) {
+                        final name = _memberNames[memberIds[index]] ?? memberIds[index];
+                        return Padding(padding: const EdgeInsets.only(top: 8), child: Text(name.length > 6 ? '${name.substring(0, 6)}…' : name, style: const TextStyle(fontSize: 10)));
+                      }
+                      return const Text('');
+                    })),
+                  ),
+                  barGroups: memberIds.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final memberId = entry.value;
+                    return BarChartGroupData(x: index, barRods: [BarChartRodData(toY: (memberTasksCount[memberId] ?? 0).toDouble(), color: AppColors.info, width: 20, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))]);
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -487,156 +455,13 @@ class _GradesTabState extends State<GradesTab>
         children: [
           Row(
             children: [
-              Expanded(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.work,
-                            color: AppColors.error),
-                        const SizedBox(height: 8),
-                        Text('Busiest',
-                            style: TextStyle(
-                                color:
-                                AppColors.textSecondary)),
-                        Text(
-                            _memberNames[busiest?.key] ??
-                                'N/A',
-                            style: const TextStyle(
-                                fontWeight:
-                                FontWeight.bold)),
-                        Text(
-                            '${busiest?.value ?? 0} tasks'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [const Icon(Icons.work, color: AppColors.error), const SizedBox(height: 8), Text('Busiest', style: TextStyle(color: AppColors.textSecondary)), Text(_memberNames[busiest?.key] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)), Text('${busiest?.value ?? 0} tasks')])))),
               const SizedBox(width: 16),
-              Expanded(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.beach_access,
-                            color: AppColors.success),
-                        const SizedBox(height: 8),
-                        Text('Lightest',
-                            style: TextStyle(
-                                color:
-                                AppColors.textSecondary)),
-                        Text(
-                            _memberNames[
-                            lightest?.key] ??
-                                'N/A',
-                            style: const TextStyle(
-                                fontWeight:
-                                FontWeight.bold)),
-                        Text(
-                            '${lightest?.value ?? 0} tasks'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [const Icon(Icons.beach_access, color: AppColors.success), const SizedBox(height: 8), Text('Lightest', style: TextStyle(color: AppColors.textSecondary)), Text(_memberNames[lightest?.key] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)), Text('${lightest?.value ?? 0} tasks')])))),
             ],
           ),
           const SizedBox(height: 16),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-                borderRadius:
-                BorderRadius.circular(AppBorderRadius.large)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Member Workload',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 250,
-                    child: BarChart(
-                      BarChartData(
-                        alignment: BarChartAlignment.spaceAround,
-                        maxY: memberTasksCount.values.isEmpty
-                            ? 1
-                            : memberTasksCount.values
-                            .reduce((a, b) =>
-                        a > b ? a : b)
-                            .toDouble() +
-                            1,
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                  showTitles: true)),
-                          bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                  showTitles: true,
-                                  getTitlesWidget:
-                                      (value, meta) {
-                                    final index =
-                                    value.toInt();
-                                    if (index <
-                                        memberIds.length) {
-                                      final name = _memberNames[
-                                      memberIds[
-                                      index]] ??
-                                          memberIds[
-                                          index];
-                                      return Padding(
-                                        padding:
-                                        const EdgeInsets
-                                            .only(top: 8),
-                                        child: Text(
-                                          name.length > 6
-                                              ? '${name.substring(0, 6)}…'
-                                              : name,
-                                          style: const TextStyle(
-                                              fontSize: 10),
-                                        ),
-                                      );
-                                    }
-                                    return const Text('');
-                                  })),
-                        ),
-                        barGroups: memberIds
-                            .asMap()
-                            .entries
-                            .map((entry) {
-                          final index = entry.key;
-                          final memberId = entry.value;
-                          return BarChartGroupData(
-                            x: index,
-                            barRods: [
-                              BarChartRodData(
-                                toY: (memberTasksCount[
-                                memberId] ??
-                                    0)
-                                    .toDouble(),
-                                color: AppColors.info,
-                                width: 20,
-                                borderRadius:
-                                const BorderRadius.vertical(
-                                    top:
-                                    Radius.circular(
-                                        4)),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _exportableSection(workloadBarChart, 'workload_chart', GlobalKey()),
         ],
       ),
     );
@@ -646,21 +471,14 @@ class _GradesTabState extends State<GradesTab>
     if (tasks.isEmpty) return 100;
     int score = 100;
     final now = DateTime.now();
-    score -= tasks
-        .where((t) =>
-    !t.isCompleted && t.deadline.isBefore(now))
-        .length *
-        10;
+    score -= tasks.where((t) => !t.isCompleted && t.deadline.isBefore(now)).length * 10;
     for (var task in tasks) {
       if (task.isCompleted) continue;
-      final totalDuration =
-          task.deadline.difference(task.startDate).inDays;
+      final totalDuration = task.deadline.difference(task.startDate).inDays;
       final elapsed = now.difference(task.startDate).inDays;
       if (totalDuration > 0) {
-        final expectedProgress =
-        (elapsed / totalDuration * 100).clamp(0, 100);
-        if (task.progressPercent < expectedProgress - 20)
-          score -= 5;
+        final expectedProgress = (elapsed / totalDuration * 100).clamp(0, 100);
+        if (task.progressPercent < expectedProgress - 20) score -= 5;
       }
     }
     return score.clamp(0, 100);
