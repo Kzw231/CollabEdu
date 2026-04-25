@@ -10,6 +10,7 @@ class CreateTaskScreen extends StatefulWidget {
   final DateTime projectDeadline;
   final List<String> memberIds;
   final Map<String, String> memberNames;
+  final Map<String, int> memberTaskCount;
 
   const CreateTaskScreen({
     super.key,
@@ -17,6 +18,7 @@ class CreateTaskScreen extends StatefulWidget {
     required this.projectDeadline,
     required this.memberIds,
     required this.memberNames,
+    required this.memberTaskCount,
   });
 
   @override
@@ -27,27 +29,46 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
+  final _tagController = TextEditingController();
   late DateTime _selectedDate;
   late String _selectedMemberId;
   late Priority _selectedPriority;
-  int _estimatedHours = 0;
   List<String> _selectedTags = [];
   bool _isSaving = false;
+
+  String? _recommendedMemberId;
+  String? _recommendedMemberName;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = widget.projectDeadline;
-    // 自动推荐工作量最小的成员
-    // （这里简单取第一个，调用方可事先计算后传参，我们暂时不计算）
-    _selectedMemberId = widget.memberIds.isNotEmpty ? widget.memberIds.first : '';
     _selectedPriority = Priority.medium;
+
+    // 计算推荐成员（任务数最少的成员）
+    if (widget.memberIds.isNotEmpty) {
+      int minTasks = widget.memberTaskCount[widget.memberIds.first] ?? 0;
+      String recommendedId = widget.memberIds.first;
+      for (final id in widget.memberIds) {
+        final count = widget.memberTaskCount[id] ?? 0;
+        if (count < minTasks) {
+          minTasks = count;
+          recommendedId = id;
+        }
+      }
+      _recommendedMemberId = recommendedId;
+      _recommendedMemberName = widget.memberNames[recommendedId] ?? recommendedId;
+      _selectedMemberId = recommendedId;
+    } else {
+      _selectedMemberId = '';
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
@@ -71,13 +92,27 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       deadline: _selectedDate,
       priority: _selectedPriority,
       tags: _selectedTags,
-      estimatedHours: _estimatedHours,
+      estimatedHours: 0,
     );
 
-    // 直接返回给前一个页面，由它去插入数据库并刷新
     if (mounted) {
       Navigator.pop(context, newTask);
     }
+  }
+
+  void _addCustomTag() {
+    final tag = _tagController.text.trim();
+    if (tag.isEmpty) return;
+    if (_selectedTags.contains(tag)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tag already added')),
+      );
+      return;
+    }
+    setState(() {
+      _selectedTags = [..._selectedTags, tag];
+      _tagController.clear();
+    });
   }
 
   @override
@@ -129,6 +164,28 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 maxLines: 3,
               ),
               const SizedBox(height: 20),
+              if (_recommendedMemberName != null)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_awesome,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Recommended: $_recommendedMemberName',
+                          style: TextStyle(fontSize: 13, color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _selectedMemberId.isNotEmpty ? _selectedMemberId : null,
                 decoration: InputDecoration(
@@ -181,19 +238,6 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 onChanged: (v) => setState(() => _selectedPriority = v!),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                initialValue: '0',
-                decoration: InputDecoration(
-                  labelText: 'Estimated Hours',
-                  prefixIcon: const Icon(Icons.timer_outlined),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (v) =>
-                _estimatedHours = int.tryParse(v) ?? 0,
-              ),
-              const SizedBox(height: 16),
               Text('Tags',
                   style: Theme.of(context)
                       .textTheme
@@ -203,6 +247,33 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               TagSelector(
                 selectedTags: _selectedTags,
                 onChanged: (tags) => setState(() => _selectedTags = tags),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tagController,
+                      decoration: InputDecoration(
+                        labelText: 'Add custom tag',
+                        prefixIcon: const Icon(Icons.label_outline),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onSubmitted: (_) => _addCustomTag(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _addCustomTag,
+                    icon: const Icon(Icons.add, size: 20),
+                    label: const Text('Add'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
@@ -230,8 +301,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: const Icon(Icons.calendar_today),
-          border:
-          OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(DateFormat.yMMMd().format(date)),
       ),
