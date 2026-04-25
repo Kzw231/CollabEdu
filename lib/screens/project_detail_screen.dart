@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 import '../models/project.dart';
 import '../models/task.dart';
+import '../services/current_user.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/tag_selector.dart';
 import '../theme.dart';
 import 'task_detail_screen.dart';
 import 'gantt_chart_screen.dart';
@@ -39,11 +38,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   List<Task> _allTasks = [];
   List<String> _projectMemberIds = [];
   Map<String, String> _memberNames = {};
+  late bool _isOwner;
 
   @override
   void initState() {
     super.initState();
     _allTasks = List.from(widget.tasks);
+    _isOwner = CurrentUser.memberId == widget.project.createdBy;
     _loadProjectMembers();
     _loadTasksFromDB();
   }
@@ -174,6 +175,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _navigateToCreateTask(BuildContext context) async {
     await _loadProjectMembers();
 
+    final memberTaskCount = <String, int>{};
+    for (final mid in _projectMemberIds) {
+      memberTaskCount[mid] = _allTasks
+          .where((t) => t.assignedTo == mid && t.parentTaskId == null)
+          .length;
+    }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -182,6 +190,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           projectDeadline: widget.project.deadline,
           memberIds: _projectMemberIds,
           memberNames: _memberNames,
+          memberTaskCount: memberTaskCount,
         ),
       ),
     );
@@ -237,6 +246,63 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
   }
 
+  Widget _buildProjectInfoHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.project.name,
+              style: const TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.bold)),
+          if (widget.project.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(widget.project.description,
+                style: TextStyle(
+                    fontSize: 16, color: AppColors.textSecondary)),
+          ],
+          const SizedBox(height: 12),
+          Row(children: [
+            Icon(Icons.person, size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text(
+                'Owner: ${_isOwner ? "You" : widget.project.createdBy}',
+                style: TextStyle(
+                    fontSize: 14, color: AppColors.textSecondary)),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            Icon(Icons.code, size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text('Code: ${widget.project.id.substring(0, 8)}',
+                style: TextStyle(
+                    fontSize: 14, color: AppColors.textSecondary)),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            Icon(Icons.calendar_today,
+                size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text('Deadline: ${_formatDate(widget.project.deadline)}',
+                style: TextStyle(
+                    fontSize: 14, color: AppColors.textSecondary)),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            Icon(Icons.info_outline,
+                size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text('Status: ${widget.project.status}',
+                style: TextStyle(
+                    fontSize: 14, color: AppColors.textSecondary)),
+          ]),
+          const SizedBox(height: 16),
+          const Divider(),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mainTasks = _sortAndFilterTasks(_allTasks);
@@ -249,7 +315,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           slivers: [
             SliverAppBar(
               pinned: true,
-              expandedHeight: 160,
+              expandedHeight: 80,
               backgroundColor: AppColors.primaryLight,
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding:
@@ -257,59 +323,23 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 title: Text(
                   widget.project.name,
                   style: const TextStyle(
-                      fontSize: AppFontSizes.bodyLarge,
-                      fontWeight: FontWeight.w600),
+                      fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-                background: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 50, 16, 16),
-                  alignment: Alignment.bottomLeft,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.project.name,
-                          style: const TextStyle(
-                              fontSize: AppFontSizes.headlineMedium,
-                              fontWeight: FontWeight.bold)),
-                      if (widget.project.description.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(widget.project.description,
-                            style: TextStyle(
-                                fontSize: AppFontSizes.bodyMedium,
-                                color: AppColors.textSecondary)),
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                          'Owner: You  •  Code: ${widget.project.id.substring(0, 6)}',
-                          style: TextStyle(
-                              fontSize: AppFontSizes.bodySmall,
-                              color: AppColors.textSecondary)),
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        Icon(Icons.calendar_today,
-                            size: 14, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                            'Deadline: ${_formatDate(widget.project.deadline)}',
-                            style: TextStyle(
-                                fontSize: AppFontSizes.bodySmall,
-                                color: AppColors.textSecondary))
-                      ]),
-                    ],
-                  ),
-                ),
+                background: Container(color: AppColors.primaryLight),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'Edit project',
-                  onPressed: () => Navigator.pop(context, 'edit'),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Delete project',
-                  onPressed: _confirmDeleteProject,
-                ),
+                if (_isOwner) ...[
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edit project',
+                    onPressed: () => Navigator.pop(context, 'edit'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Delete project',
+                    onPressed: _confirmDeleteProject,
+                  ),
+                ],
                 PopupMenuButton<TaskSortBy>(
                   icon: const Icon(Icons.sort),
                   onSelected: (value) => setState(() {
@@ -345,20 +375,18 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.timeline),
-                  onPressed: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => GanttChartScreen(
-                                project: widget.project,
-                                tasks: _allTasks)));
-                  },
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => GanttChartScreen(
+                              project: widget.project, tasks: _allTasks))),
                   tooltip: 'View Timeline',
                 ),
               ],
             ),
+            SliverToBoxAdapter(child: _buildProjectInfoHeader()),
             SliverPadding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   TextField(
@@ -381,6 +409,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       task: task,
                       allTasks: _allTasks,
                       memberNames: _memberNames,
+                      project: widget.project,
                       onTap: () => _openTaskDetail(task),
                     )),
                 ]),
@@ -400,140 +429,186 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
+// ---------- Updated Task Card with Project Colors and Risk ----------
 class _TaskWithSubtasksCard extends StatelessWidget {
   final Task task;
   final List<Task> allTasks;
   final Map<String, String> memberNames;
+  final Project project;
   final VoidCallback onTap;
 
   const _TaskWithSubtasksCard({
     required this.task,
     required this.allTasks,
     required this.memberNames,
+    required this.project,
     required this.onTap,
   });
 
-  Color _priorityColor(Priority priority) {
-    switch (priority) {
-      case Priority.low:
-        return AppColors.info;
-      case Priority.medium:
-        return AppColors.warning;
-      case Priority.high:
-        return AppColors.error;
-    }
-  }
-
-  List<Task> _getSubtasks() {
-    return allTasks.where((t) => t.parentTaskId == task.id).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final subtasks = _getSubtasks();
+    final subtasks = allTasks.where((t) => t.parentTaskId == task.id).toList();
     final isOverdue =
         task.deadline.isBefore(DateTime.now()) && !task.isCompleted;
     final assigneeName = memberNames[task.assignedTo] ?? task.assignedTo;
 
+    // Use project's priority color or default
+    final priorityColor = project.priorityColor(task.priority);
+
     return Card(
-      child: Column(
-        children: [
-          ListTile(
-            onTap: onTap,
-            leading: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                  color: _priorityColor(task.priority),
-                  shape: BoxShape.circle),
-            ),
-            title: Text(
-              task.title,
-              style: TextStyle(
-                decoration:
-                task.isCompleted ? TextDecoration.lineThrough : null,
-                color: isOverdue ? AppColors.error : null,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                    "$assigneeName • Due ${task.deadline.toString().split(' ')[0]}"),
-                if (task.isCompleted && task.completedAt != null)
-                  Text(
-                    '✓ Completed ${DateFormat('MM/dd HH:mm').format(task.completedAt!)}',
-                    style: TextStyle(fontSize: 12, color: AppColors.success),
-                  ),
-                if (task.tags.isNotEmpty)
-                  Wrap(
-                    spacing: 4,
-                    children: task.tags
-                        .map((tag) => Chip(
-                      label: Text(tag,
-                          style: const TextStyle(fontSize: 10)),
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ))
-                        .toList(),
-                  ),
-              ],
-            ),
-          ),
-          if (subtasks.isNotEmpty)
-            ExpansionTile(
-              title: Text('Subtasks (${subtasks.length})',
-                  style: TextStyle(
-                      fontSize: 14, color: AppColors.textSecondary)),
-              children: subtasks.map((sub) {
-                final subAssigneeName =
-                    memberNames[sub.assignedTo] ?? sub.assignedTo;
-                return ListTile(
-                  dense: true,
-                  leading: Icon(Icons.subdirectory_arrow_right,
-                      size: 18, color: AppColors.textSecondary),
-                  title: Text(
-                    sub.title,
-                    style: TextStyle(
-                      decoration: sub.isCompleted
-                          ? TextDecoration.lineThrough
-                          : null,
-                      fontSize: 14,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: priorityColor,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  subtitle: Text(
-                    '$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => TaskDetailScreen(
-                          task: sub,
-                          project: null,
-                          allTasks: allTasks,
-                          onTaskUpdated: (updated) async {
-                            await Supabase.instance.client
-                                .from('tasks')
-                                .update(updated.toJson())
-                                .eq('id', updated.id);
-                          },
-                          onTaskDeleted: () async {
-                            await Supabase.instance.client
-                                .from('tasks')
-                                .delete()
-                                .eq('id', sub.id);
-                          },
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  decoration: task.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: isOverdue
+                                      ? AppColors.error
+                                      : AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (task.risk == RiskLevel.high)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(Icons.warning_amber_rounded,
+                                    color: AppColors.error, size: 18),
+                              ),
+                            if (task.isCompleted)
+                              const Icon(Icons.check_circle,
+                                  color: AppColors.success, size: 20),
+                          ],
                         ),
-                      ),
-                    );
-                  },
-                );
-              }).toList(),
-            ),
-        ],
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.person_outline,
+                                size: 14, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Text(assigneeName,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary)),
+                            const Spacer(),
+                            if (task.isCompleted)
+                              const SizedBox()
+                            else ...[
+                              Icon(Icons.calendar_today,
+                                  size: 14,
+                                  color: isOverdue
+                                      ? AppColors.error
+                                      : AppColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                DateFormat.MMMd().format(task.deadline),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: isOverdue
+                                        ? AppColors.error
+                                        : AppColors.textSecondary),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (subtasks.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: 8),
+                Text(
+                  'Subtasks (${subtasks.length})',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 4),
+                ...subtasks.map((sub) {
+                  final subAssignee =
+                      memberNames[sub.assignedTo] ?? sub.assignedTo;
+                  final subIsOverdue = sub.deadline.isBefore(DateTime.now()) &&
+                      !sub.isCompleted;
+                  final subPriorityColor = project.priorityColor(sub.priority);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 8, top: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: subPriorityColor,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            sub.title,
+                            style: TextStyle(
+                                fontSize: 13,
+                                decoration: sub.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: subIsOverdue
+                                    ? AppColors.error
+                                    : AppColors.textPrimary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (sub.risk == RiskLevel.high)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.warning_amber_rounded,
+                                color: AppColors.error, size: 14),
+                          ),
+                        if (sub.isCompleted)
+                          const Icon(Icons.check_circle,
+                              color: AppColors.success, size: 14),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
