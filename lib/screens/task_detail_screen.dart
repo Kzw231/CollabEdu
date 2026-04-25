@@ -67,8 +67,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           .from('project_members')
           .select('member_id')
           .eq('project_id', widget.project!.id);
-      final ids =
-      (links as List).map((e) => e['member_id'] as String).toList();
+      final ids = (links as List).map((e) => e['member_id'] as String).toList();
       if (ids.isEmpty) {
         setState(() {
           _memberIds = [];
@@ -155,14 +154,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Edit comment'),
+        title: const Text('Edit comment'),
         content: TextField(controller: controller, maxLines: 3),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, controller.text),
-              child: Text('Save')),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -184,15 +183,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete comment'),
-        content: Text('Delete this comment?'),
+        title: const Text('Delete comment'),
+        content: const Text('Delete this comment?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Cancel')),
+              child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Delete')),
+              child: const Text('Delete')),
         ],
       ),
     );
@@ -255,10 +254,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final projectDeadline =
-        widget.project?.deadline ?? DateTime(2100);
-    final initialDate =
-    isStart ? _selectedStartDate : _selectedDeadline;
+    final projectDeadline = widget.project?.deadline ?? DateTime(2100);
+    final initialDate = isStart ? _selectedStartDate : _selectedDeadline;
     final firstDate = isStart ? DateTime(2020) : _selectedStartDate;
     final lastDate = isStart ? _selectedDeadline : projectDeadline;
     final picked = await showDatePicker(
@@ -280,16 +277,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Task'),
-        content:
-        Text('Are you sure you want to delete "${_task.title}"?'),
+        content: Text('Are you sure you want to delete "${_task.title}"?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style:
-            ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Delete'),
           ),
         ],
@@ -321,7 +316,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       widget.onTaskUpdated(_task);
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(newStatus ? 'Task marked as complete' : 'Task reopened')),
+        SnackBar(content: Text(
+            newStatus ? 'Task marked as complete' : 'Task reopened')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -337,8 +333,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     });
     try {
       await _supabase.from('tasks').update({
-        'actual_start_date':
-        _task.actualStartDate!.toIso8601String(),
+        'actual_start_date': _task.actualStartDate!.toIso8601String(),
       }).eq('id', _task.id);
       widget.onTaskUpdated(_task);
     } catch (e) {
@@ -353,6 +348,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final titleController = TextEditingController();
     DateTime selectedDate = _task.deadline;
     Priority selectedPriority = Priority.medium;
+    List<String> selectedTags = [];
     bool isTitleValid = false;
 
     await showDialog(
@@ -360,41 +356,88 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
-            title: const Text('Add Subtask'),
-            content: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: titleController,
-                    decoration:
-                    const InputDecoration(labelText: 'Title *'),
-                    validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-                    onChanged: (v) => setStateDialog(() =>
-                    isTitleValid = v != null && v.trim().isNotEmpty),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<Priority>(
-                    value: selectedPriority,
-                    items: Priority.values
-                        .map((p) => DropdownMenuItem(
-                        value: p,
-                        child: Text(p.name.toUpperCase())))
-                        .toList(),
-                    onChanged: (v) =>
-                        setStateDialog(() => selectedPriority = v!),
-                    decoration:
-                    const InputDecoration(labelText: 'Priority'),
-                  ),
-                ],
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: Row(children: [
+              Icon(Icons.subdirectory_arrow_right, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text('Add Subtask',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ]),
+            content: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        labelText: 'Title *',
+                        prefixIcon: Icon(Icons.title),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      autofocus: true,
+                      validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                      onChanged: (v) => setStateDialog(() =>
+                      isTitleValid = v != null && v.trim().isNotEmpty),
+                    ),
+                    SizedBox(height: 16),
+                    _buildDateFieldDialog('Deadline', selectedDate, () async {
+                      final pick = await showDatePicker(
+                        context: ctx,
+                        firstDate: DateTime.now(),
+                        lastDate: _task.deadline,
+                        initialDate: selectedDate,
+                      );
+                      if (pick != null)
+                        setStateDialog(() => selectedDate = pick);
+                    }),
+                    SizedBox(height: 16),
+                    DropdownButtonFormField<Priority>(
+                      value: selectedPriority,
+                      decoration: InputDecoration(
+                        labelText: 'Priority',
+                        prefixIcon: Icon(Icons.flag_outlined),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      items: Priority.values
+                          .map((p) => DropdownMenuItem(
+                          value: p,
+                          child: Row(children: [
+                            Icon(Icons.circle,
+                                size: 12,
+                                color: p == Priority.high
+                                    ? AppColors.error
+                                    : p == Priority.medium
+                                    ? AppColors.warning
+                                    : AppColors.info),
+                            SizedBox(width: 8),
+                            Text(p.name.toUpperCase()),
+                          ])))
+                          .toList(),
+                      onChanged: (v) =>
+                          setStateDialog(() => selectedPriority = v!),
+                    ),
+                    SizedBox(height: 16),
+                    Text('Tags', style: TextStyle(fontWeight: FontWeight.w600)),
+                    SizedBox(height: 8),
+                    TagSelector(
+                      selectedTags: selectedTags,
+                      onChanged: (tags) =>
+                          setStateDialog(() => selectedTags = tags),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel')),
+                  child: Text('Cancel')),
               ElevatedButton(
                 onPressed: isTitleValid
                     ? () async {
@@ -406,6 +449,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       assignedTo: _task.assignedTo,
                       deadline: selectedDate,
                       priority: selectedPriority,
+                      tags: selectedTags,
                       parentTaskId: _task.id,
                     );
                     await _supabase
@@ -416,7 +460,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   }
                 }
                     : null,
-                child: const Text('Create'),
+                child: Text('Create'),
               ),
             ],
           );
@@ -471,15 +515,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildDetailView() {
-    final completedSubtasks =
-        _subtasks.where((s) => s.isCompleted).length;
+    final completedSubtasks = _subtasks.where((s) => s.isCompleted).length;
     final subtaskProgress =
     _subtasks.isEmpty ? 0.0 : completedSubtasks / _subtasks.length;
     final bool isMainTask = _task.parentTaskId == null;
-    final projectName =
-        widget.project?.name ?? _findProjectName();
-    final assigneeName =
-        _memberNames[_task.assignedTo] ?? _task.assignedTo;
+    final projectName = widget.project?.name ?? _findProjectName();
+    final assigneeName = _memberNames[_task.assignedTo] ?? _task.assignedTo;
+    final canDelete = _task.createdBy == CurrentUser.memberId ||
+        _task.assignedTo == CurrentUser.memberId;
+
+    final Project? project = widget.project;
+    final priorityColor =
+        project?.priorityColor(_task.priority) ?? _defaultPriorityColor(_task.priority);
 
     return CustomScrollView(
       slivers: [
@@ -488,34 +535,49 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           expandedHeight: 120,
           backgroundColor: AppColors.primaryLight,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _confirmDelete,
-              tooltip: 'Delete task',
-            ),
+            if (canDelete)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _confirmDelete,
+                tooltip: 'Delete task',
+              ),
           ],
           flexibleSpace: FlexibleSpaceBar(
-            title: Text(_task.title,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Row(children: [
+              Expanded(
+                child: Text(_task.title,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600)),
+              ),
+              if (_task.risk == RiskLevel.high)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(Icons.warning_amber_rounded,
+                      color: AppColors.error, size: 20),
+                ),
+            ]),
             background: Container(
               alignment: Alignment.bottomLeft,
-              padding:
-              const EdgeInsets.fromLTRB(16, 40, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_task.title,
-                      style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold)),
+                  Row(children: [
+                    Expanded(
+                      child: Text(_task.title,
+                          style: const TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.bold)),
+                    ),
+                    if (_task.risk == RiskLevel.high)
+                      const Icon(Icons.warning_amber_rounded,
+                          color: AppColors.error, size: 24),
+                  ]),
                   const SizedBox(height: 4),
                   Text(
                     'Project: $projectName',
                     style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textSecondary),
+                        fontSize: 14, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -545,12 +607,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                         ),
                       if (!_task.isCompleted &&
-                          _task.actualStartDate != null) ...[
+                          _task.actualStartDate != null)
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _toggleComplete,
-                            icon: const Icon(
-                                Icons.check_circle_outline),
+                            icon: const Icon(Icons.check_circle_outline),
                             label: const Text('Mark Complete'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
@@ -558,7 +619,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ),
                         ),
-                      ],
                       if (_task.isCompleted) ...[
                         Expanded(
                           child: ElevatedButton.icon(
@@ -593,10 +653,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     children: [
                       const Text('Overview',
                           style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600)),
+                              fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
-                      _buildOverviewGrid(assigneeName),
+                      _buildOverviewGrid(assigneeName, priorityColor),
                     ],
                   ),
                 ),
@@ -610,8 +669,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     children: [
                       const Text('Progress',
                           style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600)),
+                              fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -622,10 +680,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                               alignment: Alignment.center,
                               children: [
                                 CircularProgressIndicator(
-                                  value:
-                                  _task.progressPercent / 100,
-                                  backgroundColor:
-                                  AppColors.divider,
+                                  value: _task.progressPercent / 100,
+                                  backgroundColor: AppColors.divider,
                                   color: _task.isCompleted
                                       ? AppColors.success
                                       : AppColors.primary,
@@ -634,8 +690,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 Text(
                                   '${_task.progressPercent}%',
                                   style: const TextStyle(
-                                      fontWeight:
-                                      FontWeight.bold),
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -643,22 +698,24 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           const SizedBox(width: 24),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildInfoRow('Estimated',
-                                    '${_task.estimatedHours}h'),
-                                const SizedBox(height: 8),
-                                _buildInfoRow('Actual Time',
-                                    _task.actualTimeDisplay),
                                 if (_task.actualStartDate != null)
                                   Text(
                                     'Started: ${DateFormat('MM/dd HH:mm').format(_task.actualStartDate!)}',
                                     style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors
-                                            .textSecondary),
+                                        fontSize: 13,
+                                        color: AppColors.textSecondary),
                                   ),
+                                if (_task.completedAt != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Completed: ${DateFormat('MM/dd HH:mm').format(_task.completedAt!)}',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.success),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -674,13 +731,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Description',
                             style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600)),
+                                fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Text(_task.description),
                       ],
@@ -692,17 +747,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Description',
                             style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600)),
+                                fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Text('No description provided.',
-                            style: TextStyle(
-                                color: AppColors.textHint)),
+                            style: TextStyle(color: AppColors.textHint)),
                       ],
                     ),
                   ),
@@ -713,22 +765,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
                             const Text('Subtasks',
                                 style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight:
-                                    FontWeight.w600)),
+                                    fontSize: 18, fontWeight: FontWeight.w600)),
                             const Spacer(),
                             TextButton.icon(
-                              onPressed:
-                              _showAddSubtaskDialog,
-                              icon: const Icon(Icons.add,
-                                  size: 18),
+                              onPressed: _showAddSubtaskDialog,
+                              icon: const Icon(Icons.add, size: 18),
                               label: const Text('Add'),
                             ),
                           ],
@@ -737,61 +784,61 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         if (_subtasks.isNotEmpty)
                           LinearProgressIndicator(
                             value: subtaskProgress,
-                            backgroundColor:
-                            AppColors.divider,
+                            backgroundColor: AppColors.divider,
                             color: AppColors.primary,
                           ),
                         const SizedBox(height: 8),
                         Text(
                             '$completedSubtasks of ${_subtasks.length} subtasks completed',
                             style: TextStyle(
-                                color:
-                                AppColors.textSecondary)),
+                                color: AppColors.textSecondary)),
                         const SizedBox(height: 8),
                         if (_subtasks.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 16),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             child: Center(
                               child: Text('No subtasks yet',
                                   style: TextStyle(
-                                      color:
-                                      AppColors.textHint)),
+                                      color: AppColors.textHint)),
                             ),
                           )
                         else
-                          ExpansionTile(
-                            title: Text(
-                                'View Subtasks (${_subtasks.length})'),
-                            children: _subtasks.map((sub) {
-                              final subAssigneeName =
-                                  _memberNames[
-                                  sub.assignedTo] ??
-                                      sub.assignedTo;
-                              return ListTile(
-                                dense: true,
-                                leading: Icon(
-                                    Icons
-                                        .subdirectory_arrow_right,
-                                    size: 18,
-                                    color: AppColors
-                                        .textSecondary),
-                                title: Text(
-                                  sub.title,
-                                  style: TextStyle(
-                                    decoration: sub.isCompleted
-                                        ? TextDecoration
-                                        .lineThrough
-                                        : null,
+                          ..._subtasks.map((sub) {
+                            final subAssigneeName =
+                                _memberNames[sub.assignedTo] ?? sub.assignedTo;
+                            final subPriorityColor =
+                                project?.priorityColor(sub.priority) ??
+                                    _defaultPriorityColor(sub.priority);
+                            return ListTile(
+                              dense: true,
+                              leading: Container(
+                                width: 4,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: subPriorityColor,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              title: Row(children: [
+                                Expanded(
+                                  child: Text(
+                                    sub.title,
+                                    style: TextStyle(
+                                      decoration: sub.isCompleted
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                    ),
                                   ),
                                 ),
-                                subtitle: Text(
-                                    '$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}'),
-                                onTap: () =>
-                                    _openSubtaskDetail(sub),
-                              );
-                            }).toList(),
-                          ),
+                                if (sub.risk == RiskLevel.high)
+                                  const Icon(Icons.warning_amber_rounded,
+                                      color: AppColors.error, size: 14),
+                              ]),
+                              subtitle: Text(
+                                  '$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}'),
+                              onTap: () => _openSubtaskDetail(sub),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -802,13 +849,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Tags',
                             style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600)),
+                                fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
@@ -816,12 +861,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           children: _task.tags
                               .map((tag) => Chip(
                             label: Text(tag),
-                            backgroundColor:
-                            AppColors.primaryLight,
+                            backgroundColor: AppColors.primaryLight,
                             avatar: Icon(Icons.tag,
-                                size: 16,
-                                color:
-                                AppColors.primary),
+                                size: 16, color: AppColors.primary),
                           ))
                               .toList(),
                         ),
@@ -840,46 +882,37 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         children: [
                           const Text('Comments',
                               style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600)),
+                                  fontSize: 18, fontWeight: FontWeight.w600)),
                           const Spacer(),
                           Text('${_comments.length}',
                               style: TextStyle(
-                                  color:
-                                  AppColors.textSecondary)),
+                                  color: AppColors.textSecondary)),
                         ],
                       ),
                       const SizedBox(height: 12),
                       if (_comments.isEmpty)
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Center(
                             child: Text('No comments yet',
-                                style: TextStyle(
-                                    color:
-                                    AppColors.textHint)),
+                                style: TextStyle(color: AppColors.textHint)),
                           ),
                         )
                       else
                         ..._comments.map((c) => _CommentTile(
                           comment: c,
                           isOwner: c.author ==
-                              (CurrentUser.name ??
-                                  CurrentUser.email),
+                              (CurrentUser.name ?? CurrentUser.email),
                           onEdit: () => _editComment(c),
-                          onDelete: () =>
-                              _deleteComment(c),
+                          onDelete: () => _deleteComment(c),
                         )),
                       const Divider(),
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
-                              controller:
-                              _commentController,
-                              decoration:
-                              const InputDecoration(
+                              controller: _commentController,
+                              decoration: const InputDecoration(
                                 hintText: 'Add a comment...',
                                 border: InputBorder.none,
                               ),
@@ -904,52 +937,49 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  String _findProjectName() {
-    return widget.project?.name ?? 'Unknown Project';
+  Color _defaultPriorityColor(Priority priority) {
+    switch (priority) {
+      case Priority.high:
+        return AppColors.error;
+      case Priority.medium:
+        return AppColors.warning;
+      case Priority.low:
+        return AppColors.info;
+    }
   }
 
-  Widget _buildOverviewGrid(String assigneeName) {
+  String _findProjectName() => widget.project?.name ?? 'Unknown Project';
+
+  Widget _buildOverviewGrid(String assigneeName, Color priorityColor) {
     final statusColor =
     _task.isCompleted ? AppColors.success : AppColors.warning;
-    final priorityColor = _task.priority == Priority.high
-        ? AppColors.error
-        : _task.priority == Priority.medium
-        ? AppColors.warning
-        : AppColors.info;
 
     return Column(
       children: [
         Row(
           children: [
             Expanded(
-                child: _buildOverviewItem(
-                    'Status',
-                    _task.isCompleted ? 'Completed' : 'Pending',
-                    Icons.flag,
-                    statusColor)),
+                child: _buildOverviewItem('Status',
+                    _task.isCompleted ? 'Completed' : 'Pending', Icons.flag, statusColor)),
             const SizedBox(width: 16),
             Expanded(
-                child: _buildOverviewItem(
-                    'Priority',
-                    _task.priority.name.toUpperCase(),
-                    Icons.priority_high,
-                    priorityColor)),
+                child: _buildOverviewItem('Priority',
+                    _task.priority.name.toUpperCase(), Icons.priority_high, priorityColor)),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-                child: _buildOverviewItem('Assigned to',
-                    assigneeName, Icons.person)),
+                child: _buildOverviewItem(
+                    'Assigned to', assigneeName, Icons.person, null)),
             const SizedBox(width: 16),
             Expanded(
               child: _buildOverviewItem(
                 'Deadline',
                 DateFormat.yMMMd().format(_task.deadline),
                 Icons.calendar_today,
-                _task.deadline.isBefore(DateTime.now()) &&
-                    !_task.isCompleted
+                _task.deadline.isBefore(DateTime.now()) && !_task.isCompleted
                     ? AppColors.error
                     : null,
               ),
@@ -960,23 +990,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         Row(
           children: [
             Expanded(
-                child: _buildOverviewItem(
-                    'Start Date',
-                    DateFormat.yMMMd()
-                        .format(_task.startDate),
-                    Icons.play_arrow)),
+                child: _buildOverviewItem('Start Date',
+                    DateFormat.yMMMd().format(_task.startDate), Icons.play_arrow, null)),
             const SizedBox(width: 16),
             Expanded(
               child: _buildOverviewItem(
                 'Completed',
                 _task.completedAt != null
-                    ? DateFormat('MM/dd HH:mm')
-                    .format(_task.completedAt!)
+                    ? DateFormat('MM/dd HH:mm').format(_task.completedAt!)
                     : '—',
                 Icons.check_circle,
-                _task.completedAt != null
-                    ? AppColors.success
-                    : null,
+                _task.completedAt != null ? AppColors.success : null,
               ),
             ),
           ],
@@ -986,8 +1010,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildOverviewItem(
-      String label, String value, IconData icon,
-      [Color? valueColor]) {
+      String label, String value, IconData icon, Color? valueColor) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -999,13 +1022,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         children: [
           Row(
             children: [
-              Icon(icon,
-                  size: 16, color: AppColors.textSecondary),
+              Icon(icon, size: 16, color: AppColors.textSecondary),
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary)),
+                      fontSize: 12, color: AppColors.textSecondary)),
             ],
           ),
           const SizedBox(height: 4),
@@ -1019,18 +1040,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      children: [
-        Text(label,
-            style: TextStyle(color: AppColors.textSecondary)),
-        const Spacer(),
-        Text(value,
-            style: const TextStyle(fontWeight: FontWeight.w500)),
-      ],
     );
   }
 
@@ -1053,16 +1062,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(
-                  labelText: 'Title *',
-                  border: OutlineInputBorder()),
+                  labelText: 'Title *', border: OutlineInputBorder()),
               validator: (v) => v!.isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _descController,
               decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder()),
+                  labelText: 'Description', border: OutlineInputBorder()),
               maxLines: 3,
             ),
             const SizedBox(height: 16),
@@ -1070,14 +1077,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               value: _selectedMemberId,
               items: _memberIds.map((id) {
                 final name = _memberNames[id] ?? id;
-                return DropdownMenuItem(
-                    value: id, child: Text(name));
+                return DropdownMenuItem(value: id, child: Text(name));
               }).toList(),
-              onChanged: (v) =>
-                  setState(() => _selectedMemberId = v!),
+              onChanged: (v) => setState(() => _selectedMemberId = v!),
               decoration: const InputDecoration(
-                  labelText: 'Assign to',
-                  border: OutlineInputBorder()),
+                  labelText: 'Assign to', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             _buildDateSelector('Start Date', _selectedStartDate,
@@ -1090,14 +1094,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               value: _selectedPriority,
               items: Priority.values
                   .map((p) => DropdownMenuItem(
-                  value: p,
-                  child: Text(p.name.toUpperCase())))
+                  value: p, child: Text(p.name.toUpperCase())))
                   .toList(),
-              onChanged: (v) =>
-                  setState(() => _selectedPriority = v!),
+              onChanged: (v) => setState(() => _selectedPriority = v!),
               decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder()),
+                  labelText: 'Priority', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1110,13 +1111,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     max: 100,
                     divisions: 10,
                     label: '$_progressPercent%',
-                    onChanged: (v) => setState(() =>
-                    _progressPercent = v.toInt()),
+                    onChanged: (v) =>
+                        setState(() => _progressPercent = v.toInt()),
                   ),
                 ),
                 Text('$_progressPercent%',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold)),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1159,6 +1159,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
     );
   }
+
+  Widget _buildDateFieldDialog(
+      String label, DateTime date, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: const Icon(Icons.calendar_today),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(DateFormat.yMMMd().format(date)),
+      ),
+    );
+  }
 }
 
 class _CommentTile extends StatelessWidget {
@@ -1184,9 +1200,7 @@ class _CommentTile extends StatelessWidget {
           CircleAvatar(
             backgroundColor: AppColors.primaryLight,
             child: Text(
-                comment.author.isNotEmpty
-                    ? comment.author[0]
-                    : '?',
+                comment.author.isNotEmpty ? comment.author[0] : '?',
                 style: TextStyle(color: AppColors.primary)),
           ),
           const SizedBox(width: 12),
@@ -1196,33 +1210,37 @@ class _CommentTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(comment.author,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat.MMMd()
-                          .add_jm()
-                          .format(comment.createdAt),
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textHint),
+                    Expanded(
+                      child: Text(comment.author,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600)),
                     ),
                     if (isOwner) ...[
-                      const Spacer(),
                       GestureDetector(
                         onTap: onEdit,
-                        child: const Icon(Icons.edit_outlined,
-                            size: 16,
-                            color: AppColors.textSecondary),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Icon(Icons.edit_outlined,
+                              size: 16, color: AppColors.textSecondary),
+                        ),
                       ),
-                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: onDelete,
-                        child: const Icon(Icons.delete_outline,
-                            size: 16, color: Colors.red),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Icon(Icons.delete_outline,
+                              size: 16, color: Colors.red),
+                        ),
                       ),
                     ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        DateFormat.MMMd().add_jm().format(comment.createdAt),
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textHint),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
