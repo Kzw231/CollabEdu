@@ -315,7 +315,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await _supabase.from('projects').insert(projectRow).select();
         final createdProject = Project.fromJson(inserted.first);
 
-        // 批量插入成员
         final memberRows = memberIds.map((mid) => {
           'project_id': createdProject.id,
           'member_id': mid,
@@ -345,10 +344,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget? _buildFAB() {
     if (_hideTabFab) return null;
     if (_selectedIndex == 0) {
-      return FloatingActionButton.extended(
+      return FloatingActionButton(
         onPressed: _createProject,
-        icon: const Icon(Icons.add),
-        label: const Text('Create project'),
+        child: const Icon(Icons.add),
       );
     }
     return null;
@@ -367,7 +365,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         projects: projects,
         tasks: tasks,
         onProjectTap: _navigateToProjectDetail,
-        onProjectEdit: editProject,          // 改为编辑
+        onProjectEdit: editProject,
         onRefresh: _loadData,
         getMemberCount: getProjectMemberCount,
       ),
