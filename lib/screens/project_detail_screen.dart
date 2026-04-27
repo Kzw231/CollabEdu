@@ -103,7 +103,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   List<Task> _sortAndFilterTasks(List<Task> tasks) {
     var filtered = tasks.where((t) {
-      if (t.parentTaskId != null) return false;
       if (showOnlyIncomplete && t.isCompleted) return false;
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
@@ -111,7 +110,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             t.description.toLowerCase().contains(query) ||
             t.tags.any((tag) => tag.toLowerCase().contains(query));
       }
-      return true;
+      // 如果没有搜索，则只显示顶级任务
+      return _searchQuery.isNotEmpty || t.parentTaskId == null;
     }).toList();
 
     switch (_sortBy) {
@@ -429,7 +429,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
-// ---------- Updated Task Card with Project Colors and Risk ----------
 class _TaskWithSubtasksCard extends StatelessWidget {
   final Task task;
   final List<Task> allTasks;
@@ -445,14 +444,23 @@ class _TaskWithSubtasksCard extends StatelessWidget {
     required this.onTap,
   });
 
+  Color _priorityColor(Priority priority) {
+    switch (priority) {
+      case Priority.low: return AppColors.info;
+      case Priority.medium: return AppColors.warning;
+      case Priority.high: return AppColors.error;
+    }
+  }
+
+  List<Task> _getSubtasks() {
+    return allTasks.where((t) => t.parentTaskId == task.id).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final subtasks = allTasks.where((t) => t.parentTaskId == task.id).toList();
-    final isOverdue =
-        task.deadline.isBefore(DateTime.now()) && !task.isCompleted;
+    final subtasks = _getSubtasks();
+    final isOverdue = task.deadline.isBefore(DateTime.now()) && !task.isCompleted;
     final assigneeName = memberNames[task.assignedTo] ?? task.assignedTo;
-
-    // Use project's priority color or default
     final priorityColor = project.priorityColor(task.priority);
 
     return Card(
@@ -488,12 +496,8 @@ class _TaskWithSubtasksCard extends StatelessWidget {
                                 task.title,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  decoration: task.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  color: isOverdue
-                                      ? AppColors.error
-                                      : AppColors.textPrimary,
+                                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                                  color: isOverdue ? AppColors.error : AppColors.textPrimary,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -513,30 +517,18 @@ class _TaskWithSubtasksCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.person_outline,
-                                size: 14, color: AppColors.textSecondary),
+                            Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
-                            Text(assigneeName,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary)),
+                            Text(assigneeName, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                             const Spacer(),
                             if (task.isCompleted)
                               const SizedBox()
                             else ...[
-                              Icon(Icons.calendar_today,
-                                  size: 14,
-                                  color: isOverdue
-                                      ? AppColors.error
-                                      : AppColors.textSecondary),
+                              Icon(Icons.calendar_today, size: 14, color: isOverdue ? AppColors.error : AppColors.textSecondary),
                               const SizedBox(width: 4),
                               Text(
                                 DateFormat.MMMd().format(task.deadline),
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: isOverdue
-                                        ? AppColors.error
-                                        : AppColors.textSecondary),
+                                style: TextStyle(fontSize: 12, color: isOverdue ? AppColors.error : AppColors.textSecondary),
                               ),
                             ],
                           ],
@@ -550,59 +542,24 @@ class _TaskWithSubtasksCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Divider(height: 1, color: AppColors.divider),
                 const SizedBox(height: 8),
-                Text(
-                  'Subtasks (${subtasks.length})',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w500),
-                ),
+                Text('Subtasks (${subtasks.length})',
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 ...subtasks.map((sub) {
-                  final subAssignee =
-                      memberNames[sub.assignedTo] ?? sub.assignedTo;
-                  final subIsOverdue = sub.deadline.isBefore(DateTime.now()) &&
-                      !sub.isCompleted;
+                  final subAssignee = memberNames[sub.assignedTo] ?? sub.assignedTo;
+                  final subIsOverdue = sub.deadline.isBefore(DateTime.now()) && !sub.isCompleted;
                   final subPriorityColor = project.priorityColor(sub.priority);
                   return Padding(
                     padding: const EdgeInsets.only(left: 8, top: 4),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: subPriorityColor,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            sub.title,
-                            style: TextStyle(
-                                fontSize: 13,
-                                decoration: sub.isCompleted
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                color: subIsOverdue
-                                    ? AppColors.error
-                                    : AppColors.textPrimary),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (sub.risk == RiskLevel.high)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(Icons.warning_amber_rounded,
-                                color: AppColors.error, size: 14),
-                          ),
-                        if (sub.isCompleted)
-                          const Icon(Icons.check_circle,
-                              color: AppColors.success, size: 14),
-                      ],
-                    ),
+                    child: Row(children: [
+                      Container(width: 4, height: 20, decoration: BoxDecoration(color: subPriorityColor, borderRadius: BorderRadius.circular(2))),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(sub.title, style: TextStyle(fontSize: 13, decoration: sub.isCompleted ? TextDecoration.lineThrough : null, color: subIsOverdue ? AppColors.error : AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      if (sub.risk == RiskLevel.high) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 14)),
+                      if (sub.isCompleted) const Icon(Icons.check_circle, color: AppColors.success, size: 14),
+                    ]),
                   );
                 }),
               ],
