@@ -10,8 +10,8 @@ class Project {
   final String createdBy;
   final DateTime createdAt;
   String status;
-  List<String> members;          // local only, not stored in projects table
-  Map<String, dynamic>? settings; // JSONB field for colors, etc.
+  List<String> members;
+  Map<String, dynamic>? settings;
 
   Project({
     required this.id,
@@ -54,36 +54,32 @@ class Project {
     };
   }
 
-  // ----- Priority color from project settings -----
   Color priorityColor(Priority priority) {
     final colors = settings?['priorityColors'] as Map?;
     if (colors != null) {
       final colorHex = colors[priority.name];
-      if (colorHex != null) {
-        return Color(int.parse(colorHex.toString()));
+      if (colorHex != null && colorHex is String) {
+        return Color(int.parse(colorHex, radix: 16));
       }
     }
-    // Defaults
     switch (priority) {
-      case Priority.high:
-        return AppColors.error;
-      case Priority.medium:
-        return AppColors.warning;
-      case Priority.low:
-        return AppColors.info;
+      case Priority.high: return AppColors.error;
+      case Priority.medium: return AppColors.warning;
+      case Priority.low: return AppColors.info;
     }
   }
 
-  // ----- Tag color from project settings -----
   Color tagColor(String tag) {
     final colors = settings?['tagColors'] as Map?;
     if (colors != null && colors[tag] != null) {
-      return Color(int.parse(colors[tag].toString()));
+      final colorHex = colors[tag];
+      if (colorHex is String) {
+        return Color(int.parse(colorHex, radix: 16));
+      }
     }
     return AppColors.primary;
   }
 
-  // Existing toMap/fromMap (unchanged)
   Map<String, dynamic> toMap() {
     return {
       'id': id,
