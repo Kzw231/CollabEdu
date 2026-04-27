@@ -1,4 +1,3 @@
-// task.dart
 enum Priority { low, medium, high }
 enum RiskLevel { none, low, medium, high }
 
@@ -56,7 +55,6 @@ class Task {
     return '${hours}h ${mins}m';
   }
 
-  // ----- Risk level calculation -----
   RiskLevel get risk {
     if (isCompleted) return RiskLevel.none;
     final now = DateTime.now();
