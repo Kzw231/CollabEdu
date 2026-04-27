@@ -12,8 +12,8 @@ class TagSelector extends StatefulWidget {
 }
 
 class _TagSelectorState extends State<TagSelector> {
-  static const allTags = ['Frontend', 'Backend', 'Design', 'Testing', 'Documentation', 'Bug', 'Feature'];
-  static const tagColors = {
+  static const presetTags = ['Frontend', 'Backend', 'Design', 'Testing', 'Documentation', 'Bug', 'Feature'];
+  static const presetColors = {
     'Frontend': Color(0xFF2196F3),
     'Backend': Color(0xFF4CAF50),
     'Design': Color(0xFF9C27B0),
@@ -23,30 +23,37 @@ class _TagSelectorState extends State<TagSelector> {
     'Feature': Color(0xFF00BCD4),
   };
 
+  List<String> get allTags {
+    final combined = <String>{...presetTags, ...widget.selectedTags};
+    return combined.toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tags = allTags;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: allTags.map((tag) {
+      children: tags.map((tag) {
         final isSelected = widget.selectedTags.contains(tag);
+        final color = presetColors[tag] ?? AppColors.primary;
         return FilterChip(
           label: Text(tag),
           selected: isSelected,
           onSelected: (selected) {
             final newTags = List<String>.from(widget.selectedTags);
             if (selected) {
-              newTags.add(tag);
+              if (!newTags.contains(tag)) newTags.add(tag);
             } else {
               newTags.remove(tag);
             }
             widget.onChanged(newTags);
             setState(() {});
           },
-          selectedColor: tagColors[tag]?.withOpacity(0.2),
-          checkmarkColor: tagColors[tag],
+          selectedColor: color.withOpacity(0.2),
+          checkmarkColor: color,
           backgroundColor: Colors.grey.shade100,
-          side: BorderSide(color: isSelected ? (tagColors[tag] ?? AppColors.primary) : Colors.transparent),
+          side: BorderSide(color: isSelected ? color : Colors.transparent),
         );
       }).toList(),
     );
