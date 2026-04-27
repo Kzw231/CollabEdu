@@ -8,6 +8,7 @@ import '../models/comment.dart';
 import '../services/current_user.dart';
 import '../widgets/tag_selector.dart';
 import '../theme.dart';
+import 'create_task_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final Task task;
@@ -69,10 +70,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           .eq('project_id', widget.project!.id);
       final ids = (links as List).map((e) => e['member_id'] as String).toList();
       if (ids.isEmpty) {
-        setState(() {
-          _memberIds = [];
-          _memberNames.clear();
-        });
+        setState(() { _memberIds = []; _memberNames.clear(); });
         return;
       }
       final members = await _supabase
@@ -83,15 +81,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       for (final m in (members as List)) {
         map[m['id']] = m['name'] ?? m['id'];
       }
-      setState(() {
-        _memberIds = ids;
-        _memberNames = map;
-      });
+      setState(() { _memberIds = ids; _memberNames = map; });
     } catch (e) {
-      setState(() {
-        _memberIds = [];
-        _memberNames.clear();
-      });
+      setState(() { _memberIds = []; _memberNames.clear(); });
     }
   }
 
@@ -157,24 +149,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         title: const Text('Edit comment'),
         content: TextField(controller: controller, maxLines: 3),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('Save')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Save')),
         ],
       ),
     );
     if (result != null && result.trim().isNotEmpty) {
       try {
-        await _supabase
-            .from('comments')
-            .update({'content': result.trim()})
-            .eq('id', comment.id);
+        await _supabase.from('comments').update({'content': result.trim()}).eq('id', comment.id);
         await _loadComments();
       } catch (e) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -186,12 +171,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         title: const Text('Delete comment'),
         content: const Text('Delete this comment?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
         ],
       ),
     );
@@ -200,8 +181,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         await _supabase.from('comments').delete().eq('id', comment.id);
         await _loadComments();
       } catch (e) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -240,10 +220,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
 
     try {
-      await _supabase
-          .from('tasks')
-          .update(_task.toJson())
-          .eq('id', _task.id);
+      await _supabase.from('tasks').update(_task.toJson()).eq('id', _task.id);
       widget.onTaskUpdated(_task);
       setState(() => _isEditing = false);
     } catch (e) {
@@ -279,9 +256,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         title: const Text('Delete Task'),
         content: Text('Are you sure you want to delete "${_task.title}"?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -309,15 +284,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     _task.progressPercent = newStatus ? 100 : 0;
     _task.completedAt = newStatus ? DateTime.now() : null;
     try {
-      await _supabase
-          .from('tasks')
-          .update(_task.toJson())
-          .eq('id', _task.id);
+      await _supabase.from('tasks').update(_task.toJson()).eq('id', _task.id);
       widget.onTaskUpdated(_task);
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(
-            newStatus ? 'Task marked as complete' : 'Task reopened')),
+        SnackBar(content: Text(newStatus ? 'Task marked as complete' : 'Task reopened')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -328,9 +299,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   Future<void> _startTask() async {
     if (_task.actualStartDate != null) return;
-    setState(() {
-      _task.actualStartDate = DateTime.now();
-    });
+    setState(() { _task.actualStartDate = DateTime.now(); });
     try {
       await _supabase.from('tasks').update({
         'actual_start_date': _task.actualStartDate!.toIso8601String(),
@@ -343,130 +312,36 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  Future<void> _showAddSubtaskDialog() async {
-    final _formKey = GlobalKey<FormState>();
-    final titleController = TextEditingController();
-    DateTime selectedDate = _task.deadline;
-    Priority selectedPriority = Priority.medium;
-    List<String> selectedTags = [];
-    bool isTitleValid = false;
+  Future<void> _addSubtask() async {
+    final memberTaskCount = <String, int>{};
+    if (widget.project != null) {
+      for (final mid in _memberIds) {
+        memberTaskCount[mid] = widget.allTasks
+            .where((t) => t.assignedTo == mid && t.parentTaskId == null)
+            .length;
+      }
+    }
 
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20)),
-            title: Row(children: [
-              Icon(Icons.subdirectory_arrow_right, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text('Add Subtask',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-            ]),
-            content: SingleChildScrollView(
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: titleController,
-                      decoration: InputDecoration(
-                        labelText: 'Title *',
-                        prefixIcon: Icon(Icons.title),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      autofocus: true,
-                      validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
-                      onChanged: (v) => setStateDialog(() =>
-                      isTitleValid = v != null && v.trim().isNotEmpty),
-                    ),
-                    SizedBox(height: 16),
-                    _buildDateFieldDialog('Deadline', selectedDate, () async {
-                      final pick = await showDatePicker(
-                        context: ctx,
-                        firstDate: DateTime.now(),
-                        lastDate: _task.deadline,
-                        initialDate: selectedDate,
-                      );
-                      if (pick != null)
-                        setStateDialog(() => selectedDate = pick);
-                    }),
-                    SizedBox(height: 16),
-                    DropdownButtonFormField<Priority>(
-                      value: selectedPriority,
-                      decoration: InputDecoration(
-                        labelText: 'Priority',
-                        prefixIcon: Icon(Icons.flag_outlined),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      items: Priority.values
-                          .map((p) => DropdownMenuItem(
-                          value: p,
-                          child: Row(children: [
-                            Icon(Icons.circle,
-                                size: 12,
-                                color: p == Priority.high
-                                    ? AppColors.error
-                                    : p == Priority.medium
-                                    ? AppColors.warning
-                                    : AppColors.info),
-                            SizedBox(width: 8),
-                            Text(p.name.toUpperCase()),
-                          ])))
-                          .toList(),
-                      onChanged: (v) =>
-                          setStateDialog(() => selectedPriority = v!),
-                    ),
-                    SizedBox(height: 16),
-                    Text('Tags', style: TextStyle(fontWeight: FontWeight.w600)),
-                    SizedBox(height: 8),
-                    TagSelector(
-                      selectedTags: selectedTags,
-                      onChanged: (tags) =>
-                          setStateDialog(() => selectedTags = tags),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('Cancel')),
-              ElevatedButton(
-                onPressed: isTitleValid
-                    ? () async {
-                  if (_formKey.currentState!.validate()) {
-                    final subtask = Task(
-                      id: const Uuid().v4(),
-                      projectId: _task.projectId,
-                      title: titleController.text.trim(),
-                      assignedTo: _task.assignedTo,
-                      deadline: selectedDate,
-                      priority: selectedPriority,
-                      tags: selectedTags,
-                      parentTaskId: _task.id,
-                    );
-                    await _supabase
-                        .from('tasks')
-                        .insert(subtask.toJson());
-                    _loadSubtasks();
-                    Navigator.pop(ctx);
-                  }
-                }
-                    : null,
-                child: Text('Create'),
-              ),
-            ],
-          );
-        },
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateTaskScreen(
+          projectId: _task.projectId,
+          projectDeadline: widget.project?.deadline ?? _task.deadline,
+          memberIds: _memberIds,
+          memberNames: _memberNames,
+          memberTaskCount: memberTaskCount,
+          parentTaskId: _task.id,
+          defaultAssignee: _task.assignedTo,
+          defaultDeadline: _task.deadline,
+        ),
       ),
     );
+
+    if (result != null && result is Task) {
+      await _supabase.from('tasks').insert(result.toJson());
+      _loadSubtasks();
+    }
   }
 
   void _openSubtaskDetail(Task subtask) {
@@ -478,18 +353,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           project: widget.project,
           allTasks: widget.allTasks,
           onTaskUpdated: (updated) async {
-            await _supabase
-                .from('tasks')
-                .update(updated.toJson())
-                .eq('id', updated.id);
+            await _supabase.from('tasks').update(updated.toJson()).eq('id', updated.id);
             _loadSubtasks();
             widget.onTaskUpdated(_task);
           },
           onTaskDeleted: () async {
-            await _supabase
-                .from('tasks')
-                .delete()
-                .eq('id', subtask.id);
+            await _supabase.from('tasks').delete().eq('id', subtask.id);
             _loadSubtasks();
             widget.onTaskUpdated(_task);
           },
@@ -502,7 +371,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _isEditing ? _buildEditForm() : _buildDetailView(),
-      floatingActionButton: _isEditing || _task.parentTaskId != null
+      floatingActionButton: _isEditing
           ? null
           : FloatingActionButton(
         onPressed: () {
@@ -514,11 +383,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
+  // ---------- Detail View ----------
   Widget _buildDetailView() {
     final completedSubtasks = _subtasks.where((s) => s.isCompleted).length;
     final subtaskProgress =
     _subtasks.isEmpty ? 0.0 : completedSubtasks / _subtasks.length;
-    final bool isMainTask = _task.parentTaskId == null;
+    final isMainTask = _task.parentTaskId == null;
     final projectName = widget.project?.name ?? _findProjectName();
     final assigneeName = _memberNames[_task.assignedTo] ?? _task.assignedTo;
     final canDelete = _task.createdBy == CurrentUser.memberId ||
@@ -687,11 +557,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                       : AppColors.primary,
                                   strokeWidth: 8,
                                 ),
-                                Text(
-                                  '${_task.progressPercent}%',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
+                                Text('${_task.progressPercent}%',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -774,7 +642,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     fontSize: 18, fontWeight: FontWeight.w600)),
                             const Spacer(),
                             TextButton.icon(
-                              onPressed: _showAddSubtaskDialog,
+                              onPressed: _addSubtask,
                               icon: const Icon(Icons.add, size: 18),
                               label: const Text('Add'),
                             ),
@@ -858,14 +726,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _task.tags
-                              .map((tag) => Chip(
-                            label: Text(tag),
-                            backgroundColor: AppColors.primaryLight,
-                            avatar: Icon(Icons.tag,
-                                size: 16, color: AppColors.primary),
-                          ))
-                              .toList(),
+                          children: _task.tags.map((tag) {
+                            final color = project?.tagColor(tag) ?? AppColors.primary;
+                            return Chip(
+                              label: Text(tag, style: TextStyle(color: color == AppColors.primary ? Colors.white : Colors.black)),
+                              backgroundColor: color.withOpacity(0.2),
+                              avatar: Icon(Icons.tag, size: 16, color: color),
+                            );
+                          }).toList(),
                         ),
                       ],
                     ),
@@ -937,112 +805,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Color _defaultPriorityColor(Priority priority) {
-    switch (priority) {
-      case Priority.high:
-        return AppColors.error;
-      case Priority.medium:
-        return AppColors.warning;
-      case Priority.low:
-        return AppColors.info;
-    }
-  }
-
-  String _findProjectName() => widget.project?.name ?? 'Unknown Project';
-
-  Widget _buildOverviewGrid(String assigneeName, Color priorityColor) {
-    final statusColor =
-    _task.isCompleted ? AppColors.success : AppColors.warning;
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-                child: _buildOverviewItem('Status',
-                    _task.isCompleted ? 'Completed' : 'Pending', Icons.flag, statusColor)),
-            const SizedBox(width: 16),
-            Expanded(
-                child: _buildOverviewItem('Priority',
-                    _task.priority.name.toUpperCase(), Icons.priority_high, priorityColor)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-                child: _buildOverviewItem(
-                    'Assigned to', assigneeName, Icons.person, null)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildOverviewItem(
-                'Deadline',
-                DateFormat.yMMMd().format(_task.deadline),
-                Icons.calendar_today,
-                _task.deadline.isBefore(DateTime.now()) && !_task.isCompleted
-                    ? AppColors.error
-                    : null,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-                child: _buildOverviewItem('Start Date',
-                    DateFormat.yMMMd().format(_task.startDate), Icons.play_arrow, null)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildOverviewItem(
-                'Completed',
-                _task.completedAt != null
-                    ? DateFormat('MM/dd HH:mm').format(_task.completedAt!)
-                    : '—',
-                Icons.check_circle,
-                _task.completedAt != null ? AppColors.success : null,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOverviewItem(
-      String label, String value, IconData icon, Color? valueColor) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: AppColors.textSecondary),
-              const SizedBox(width: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: valueColor ?? AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // ---------- Edit Form ----------
   Widget _buildEditForm() {
     return Scaffold(
       appBar: AppBar(
@@ -1061,82 +824,65 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(
-                  labelText: 'Title *', border: OutlineInputBorder()),
+              decoration: InputDecoration(
+                  labelText: 'Title *',
+                  prefixIcon: const Icon(Icons.title),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               validator: (v) => v!.isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _descController,
-              decoration: const InputDecoration(
-                  labelText: 'Description', border: OutlineInputBorder()),
+              decoration: InputDecoration(
+                  labelText: 'Description',
+                  prefixIcon: const Icon(Icons.description_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               maxLines: 3,
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _selectedMemberId,
-              items: _memberIds.map((id) {
-                final name = _memberNames[id] ?? id;
-                return DropdownMenuItem(value: id, child: Text(name));
-              }).toList(),
+              decoration: InputDecoration(
+                  labelText: 'Assign to',
+                  prefixIcon: const Icon(Icons.person_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              items: _memberIds.map((id) => DropdownMenuItem(value: id, child: Text(_memberNames[id] ?? id))).toList(),
               onChanged: (v) => setState(() => _selectedMemberId = v!),
-              decoration: const InputDecoration(
-                  labelText: 'Assign to', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
-            _buildDateSelector('Start Date', _selectedStartDate,
-                    () => _selectDate(context, true)),
+            _buildDateSelector('Start Date', _selectedStartDate, () => _selectDate(context, true)),
             const SizedBox(height: 16),
-            _buildDateSelector('Deadline', _selectedDeadline,
-                    () => _selectDate(context, false)),
+            _buildDateSelector('Deadline', _selectedDeadline, () => _selectDate(context, false)),
             const SizedBox(height: 16),
             DropdownButtonFormField<Priority>(
               value: _selectedPriority,
-              items: Priority.values
-                  .map((p) => DropdownMenuItem(
-                  value: p, child: Text(p.name.toUpperCase())))
-                  .toList(),
+              decoration: InputDecoration(
+                  labelText: 'Priority',
+                  prefixIcon: const Icon(Icons.flag_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              items: Priority.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name.toUpperCase()))).toList(),
               onChanged: (v) => setState(() => _selectedPriority = v!),
-              decoration: const InputDecoration(
-                  labelText: 'Priority', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text('Progress:'),
-                Expanded(
-                  child: Slider(
-                    value: _progressPercent.toDouble(),
-                    min: 0,
-                    max: 100,
-                    divisions: 10,
-                    label: '$_progressPercent%',
-                    onChanged: (v) =>
-                        setState(() => _progressPercent = v.toInt()),
-                  ),
-                ),
-                Text('$_progressPercent%',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
+            Row(children: [
+              const Text('Progress:'),
+              Expanded(child: Slider(value: _progressPercent.toDouble(), min: 0, max: 100, divisions: 10, label: '$_progressPercent%', onChanged: (v) => setState(() => _progressPercent = v.toInt()))),
+              Text('$_progressPercent%', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ]),
             const SizedBox(height: 16),
             TextFormField(
               initialValue: _estimatedHours.toString(),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                   labelText: 'Estimated Hours',
-                  border: OutlineInputBorder()),
+                  prefixIcon: const Icon(Icons.timer_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               keyboardType: TextInputType.number,
-              onSaved: (v) =>
-              _estimatedHours = int.tryParse(v ?? '0') ?? 0,
+              onSaved: (v) => _estimatedHours = int.tryParse(v ?? '0') ?? 0,
             ),
             const SizedBox(height: 16),
-            const Text('Tags',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Tags', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            TagSelector(
-                selectedTags: _selectedTags,
-                onChanged: (tags) =>
-                    setState(() => _selectedTags = tags)),
+            TagSelector(selectedTags: _selectedTags, onChanged: (tags) => setState(() => _selectedTags = tags)),
             const SizedBox(height: 24),
           ],
         ),
@@ -1144,24 +890,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildDateSelector(
-      String label, DateTime date, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          suffixIcon: const Icon(Icons.calendar_today),
-        ),
-        child: Text(DateFormat.yMMMd().format(date)),
-      ),
-    );
-  }
-
-  Widget _buildDateFieldDialog(
-      String label, DateTime date, VoidCallback onTap) {
+  Widget _buildDateSelector(String label, DateTime date, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1172,6 +901,86 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(DateFormat.yMMMd().format(date)),
+      ),
+    );
+  }
+
+  Color _defaultPriorityColor(Priority priority) {
+    switch (priority) {
+      case Priority.high: return AppColors.error;
+      case Priority.medium: return AppColors.warning;
+      case Priority.low: return AppColors.info;
+    }
+  }
+
+  String _findProjectName() => widget.project?.name ?? 'Unknown Project';
+
+  Widget _buildOverviewGrid(String assigneeName, Color priorityColor) {
+    final statusColor = _task.isCompleted ? AppColors.success : AppColors.warning;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildOverviewItem('Status', _task.isCompleted ? 'Completed' : 'Pending', Icons.flag, statusColor)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildOverviewItem('Priority', _task.priority.name.toUpperCase(), Icons.priority_high, priorityColor)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _buildOverviewItem('Assigned to', assigneeName, Icons.person, null)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildOverviewItem(
+                'Deadline',
+                DateFormat.yMMMd().format(_task.deadline),
+                Icons.calendar_today,
+                _task.deadline.isBefore(DateTime.now()) && !_task.isCompleted ? AppColors.error : null,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _buildOverviewItem('Start Date', DateFormat.yMMMd().format(_task.startDate), Icons.play_arrow, null)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildOverviewItem(
+                'Completed',
+                _task.completedAt != null ? DateFormat('MM/dd HH:mm').format(_task.completedAt!) : '—',
+                Icons.check_circle,
+                _task.completedAt != null ? AppColors.success : null,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOverviewItem(String label, String value, IconData icon, Color? valueColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: valueColor ?? AppColors.textPrimary)),
+        ],
       ),
     );
   }
@@ -1199,8 +1008,7 @@ class _CommentTile extends StatelessWidget {
         children: [
           CircleAvatar(
             backgroundColor: AppColors.primaryLight,
-            child: Text(
-                comment.author.isNotEmpty ? comment.author[0] : '?',
+            child: Text(comment.author.isNotEmpty ? comment.author[0] : '?',
                 style: TextStyle(color: AppColors.primary)),
           ),
           const SizedBox(width: 12),
@@ -1210,26 +1018,20 @@ class _CommentTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(
-                      child: Text(comment.author,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600)),
-                    ),
+                    Expanded(child: Text(comment.author, style: const TextStyle(fontWeight: FontWeight.w600))),
                     if (isOwner) ...[
                       GestureDetector(
                         onTap: onEdit,
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(Icons.edit_outlined,
-                              size: 16, color: AppColors.textSecondary),
+                          child: Icon(Icons.edit_outlined, size: 16, color: AppColors.textSecondary),
                         ),
                       ),
                       GestureDetector(
                         onTap: onDelete,
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(Icons.delete_outline,
-                              size: 16, color: Colors.red),
+                          child: Icon(Icons.delete_outline, size: 16, color: Colors.red),
                         ),
                       ),
                     ],
@@ -1237,8 +1039,7 @@ class _CommentTile extends StatelessWidget {
                     Flexible(
                       child: Text(
                         DateFormat.MMMd().add_jm().format(comment.createdAt),
-                        style: TextStyle(
-                            fontSize: 12, color: AppColors.textHint),
+                        style: TextStyle(fontSize: 12, color: AppColors.textHint),
                       ),
                     ),
                   ],
