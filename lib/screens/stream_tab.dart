@@ -64,10 +64,13 @@ class _StreamTabState extends State<StreamTab> {
   List<Task> _getTodayTasks() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    return widget.tasks.where((t) {
-      final deadlineDate = DateTime(t.deadline.year, t.deadline.month, t.deadline.day);
+    return widget.tasks
+        .where((t) {
+      final deadlineDate =
+      DateTime(t.deadline.year, t.deadline.month, t.deadline.day);
       return deadlineDate == today;
-    }).toList()
+    })
+        .toList()
       ..sort((a, b) => a.deadline.compareTo(b.deadline));
   }
 
@@ -105,7 +108,10 @@ class _StreamTabState extends State<StreamTab> {
           project: project,
           allTasks: widget.tasks,
           onTaskUpdated: (updated) async {
-            await _supabase.from('tasks').update(updated.toJson()).eq('id', updated.id);
+            await _supabase
+                .from('tasks')
+                .update(updated.toJson())
+                .eq('id', updated.id);
             await widget.onRefresh();
           },
           onTaskDeleted: () async {
@@ -139,7 +145,9 @@ class _StreamTabState extends State<StreamTab> {
                 padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   'Your projects',
-                  style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: AppFontSizes.headlineSmall,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
               if (widget.projects.isEmpty)
@@ -166,7 +174,10 @@ class _StreamTabState extends State<StreamTab> {
                   child: Row(children: [
                     Icon(Icons.today, color: AppColors.primary),
                     SizedBox(width: 8),
-                    Text("Today's Tasks", style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600)),
+                    Text("Today's Tasks",
+                        style: TextStyle(
+                            fontSize: AppFontSizes.headlineSmall,
+                            fontWeight: FontWeight.w600)),
                   ]),
                 ),
                 ...todayTasks.map((t) => _StreamTaskCard(
@@ -179,7 +190,12 @@ class _StreamTabState extends State<StreamTab> {
               ],
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Text('Upcoming tasks', style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600)),
+                child: Text(
+                  'Upcoming tasks',
+                  style: TextStyle(
+                      fontSize: AppFontSizes.headlineSmall,
+                      fontWeight: FontWeight.w600),
+                ),
               ),
               if (upcoming.isEmpty)
                 const Padding(
@@ -203,7 +219,11 @@ class _StreamTabState extends State<StreamTab> {
               child: FloatingActionButton.small(
                 heroTag: 'backToTop',
                 backgroundColor: AppColors.primary,
-                onPressed: () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
+                onPressed: () {
+                  _scrollController.animateTo(0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut);
+                },
                 child: const Icon(Icons.arrow_upward),
               ),
             ),
@@ -217,12 +237,15 @@ class _StreamTabState extends State<StreamTab> {
 class DashboardSummaryCard extends StatelessWidget {
   final List<Project> projects;
   final List<Task> tasks;
-  const DashboardSummaryCard({super.key, required this.projects, required this.tasks});
+  const DashboardSummaryCard(
+      {super.key, required this.projects, required this.tasks});
 
   int get totalTasks => tasks.length;
   int get completedTasks => tasks.where((t) => t.isCompleted).length;
-  int get overdueTasks => tasks.where((t) => !t.isCompleted && t.deadline.isBefore(DateTime.now())).length;
-  int get upcomingProjects => projects.where((p) => p.deadline.difference(DateTime.now()).inDays <= 3).length;
+  int get overdueTasks =>
+      tasks.where((t) => !t.isCompleted && t.deadline.isBefore(DateTime.now())).length;
+  int get upcomingProjects =>
+      projects.where((p) => p.deadline.difference(DateTime.now()).inDays <= 3).length;
   double get completionRate => totalTasks == 0 ? 0 : completedTasks / totalTasks;
 
   @override
@@ -240,16 +263,26 @@ class DashboardSummaryCard extends StatelessWidget {
               Row(children: [
                 Icon(Icons.dashboard, color: AppColors.primary),
                 const SizedBox(width: 8),
-                Text('Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                Text('Dashboard',
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600)),
               ]),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _StatItem(label: 'Tasks', value: '$totalTasks'),
-                  _StatItem(label: 'Completed', value: '${(completionRate * 100).toInt()}%'),
-                  _StatItem(label: 'Overdue', value: '$overdueTasks', color: overdueTasks > 0 ? AppColors.error : null),
-                  _StatItem(label: 'Due Soon', value: '$upcomingProjects projects', color: upcomingProjects > 0 ? AppColors.warning : null),
+                  _StatItem(
+                      label: 'Completed',
+                      value: '${(completionRate * 100).toInt()}%'),
+                  _StatItem(
+                      label: 'Overdue',
+                      value: '$overdueTasks',
+                      color: overdueTasks > 0 ? AppColors.error : null),
+                  _StatItem(
+                      label: 'Due Soon',
+                      value: '$upcomingProjects projects',
+                      color: upcomingProjects > 0 ? AppColors.warning : null),
                 ],
               ),
             ],
@@ -270,21 +303,32 @@ class _StatItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color ?? AppColors.textPrimary)),
+        Text(value,
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: color ?? AppColors.textPrimary)),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text(label,
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       ],
     );
   }
 }
 
-// ---------- Optimized Task Card ----------
+// ---------- Optimized Task Card (with tags) ----------
 class _StreamTaskCard extends StatelessWidget {
   final Task task;
   final List<Project> projects;
   final List<Task> allTasks;
   final VoidCallback onTap;
-  const _StreamTaskCard({required this.task, required this.projects, required this.allTasks, required this.onTap});
+
+  const _StreamTaskCard({
+    required this.task,
+    required this.projects,
+    required this.allTasks,
+    required this.onTap,
+  });
 
   Project? get project {
     try {
@@ -299,9 +343,12 @@ class _StreamTaskCard extends StatelessWidget {
       return project!.priorityColor(task.priority);
     }
     switch (task.priority) {
-      case Priority.high: return AppColors.error;
-      case Priority.medium: return AppColors.warning;
-      default: return AppColors.info;
+      case Priority.high:
+        return AppColors.error;
+      case Priority.medium:
+        return AppColors.warning;
+      default:
+        return AppColors.info;
     }
   }
 
@@ -309,9 +356,11 @@ class _StreamTaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final taskDate = DateTime(task.deadline.year, task.deadline.month, task.deadline.day);
+    final taskDate =
+    DateTime(task.deadline.year, task.deadline.month, task.deadline.day);
     final bool isToday = taskDate == today;
-    final bool isOverdue = task.deadline.isBefore(now) && !task.isCompleted;
+    final bool isOverdue =
+        task.deadline.isBefore(now) && !task.isCompleted;
     final risk = task.risk;
 
     return Card(
@@ -343,8 +392,12 @@ class _StreamTaskCard extends StatelessWidget {
                           task.title,
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                            color: isOverdue ? AppColors.error : AppColors.textPrimary,
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: isOverdue
+                                ? AppColors.error
+                                : AppColors.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -352,37 +405,88 @@ class _StreamTaskCard extends StatelessWidget {
                       ),
                       if (risk == RiskLevel.high) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 18),
+                        Icon(Icons.warning_amber_rounded,
+                            color: AppColors.error, size: 18),
                       ],
                       if (task.isCompleted)
-                        Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Icon(Icons.check_circle,
+                              color: AppColors.success, size: 20),
+                        ),
                     ]),
                     const SizedBox(height: 6),
                     Row(
                       children: [
                         if (isToday && !task.isCompleted)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(4)),
-                            child: Text('Today', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('Today',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w500)),
                           ),
-                        if (isToday && !task.isCompleted) const SizedBox(width: 8),
-                        Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
+                        if (isToday && !task.isCompleted)
+                          const SizedBox(width: 8),
+                        Icon(Icons.person_outline,
+                            size: 14, color: AppColors.textSecondary),
                         const SizedBox(width: 4),
-                        Text(task.assignedTo, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        Text(task.assignedTo,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary)),
                         const Spacer(),
-                        Icon(Icons.calendar_today, size: 14, color: isOverdue ? AppColors.error : AppColors.textSecondary),
+                        Icon(Icons.calendar_today,
+                            size: 14,
+                            color: isOverdue
+                                ? AppColors.error
+                                : AppColors.textSecondary),
                         const SizedBox(width: 4),
                         Text(
                           _formatDate(task.deadline),
                           style: TextStyle(
                             fontSize: 12,
-                            color: isOverdue ? AppColors.error : AppColors.textSecondary,
-                            fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
+                            color: isOverdue
+                                ? AppColors.error
+                                : AppColors.textSecondary,
+                            fontWeight:
+                            isOverdue ? FontWeight.w600 : FontWeight.normal,
                           ),
                         ),
                       ],
                     ),
+                    if (task.tags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: task.tags.map((tag) {
+                          final color =
+                              project?.tagColor(tag) ?? AppColors.primary;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              tag,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: color,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -422,9 +526,8 @@ class _ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isNearDeadline = project.deadline.difference(DateTime.now()).inDays <= 2;
-    // check for high-risk tasks inside project (simple UI indicator)
-    final hasHighRisk = false; // could be computed but omitted for brevity
+    final bool isNearDeadline =
+        project.deadline.difference(DateTime.now()).inDays <= 2;
 
     return GestureDetector(
       onTap: onTap,
@@ -438,26 +541,21 @@ class _ProjectCard extends StatelessWidget {
             children: [
               Row(children: [
                 Expanded(
-                  child: Row(children: [
-                    Flexible(
-                      child: Text(
-                        project.name,
-                        style: TextStyle(
-                          fontSize: AppFontSizes.bodyLarge,
-                          fontWeight: FontWeight.w600,
-                          color: isNearDeadline ? AppColors.error : AppColors.textPrimary,
-                        ),
-                      ),
+                  child: Text(
+                    project.name,
+                    style: TextStyle(
+                      fontSize: AppFontSizes.bodyLarge,
+                      fontWeight: FontWeight.w600,
+                      color: isNearDeadline
+                          ? AppColors.error
+                          : AppColors.textPrimary,
                     ),
-                    if (hasHighRisk) ...[
-                      const SizedBox(width: 4),
-                      Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 18),
-                    ],
-                  ]),
+                  ),
                 ),
                 if (isOwner)
                   IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 20, color: AppColors.textSecondary),
                     onPressed: onEdit,
                     tooltip: 'Edit project',
                     padding: EdgeInsets.zero,
@@ -468,15 +566,21 @@ class _ProjectCard extends StatelessWidget {
               ]),
               const SizedBox(height: 8),
               Row(children: [
-                const Icon(Icons.people, size: 14, color: AppColors.textSecondary),
+                const Icon(Icons.people,
+                    size: 14, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
-                Text('$memberCount members', style: TextStyle(fontSize: AppFontSizes.bodySmall, color: AppColors.textSecondary)),
+                Text('$memberCount members',
+                    style: TextStyle(
+                        fontSize: AppFontSizes.bodySmall,
+                        color: AppColors.textSecondary)),
                 const Spacer(),
                 Text(
                   'Deadline ${_formatDate(project.deadline)}',
                   style: TextStyle(
                     fontSize: AppFontSizes.bodySmall,
-                    color: isNearDeadline ? AppColors.error : AppColors.textSecondary,
+                    color: isNearDeadline
+                        ? AppColors.error
+                        : AppColors.textSecondary,
                   ),
                 ),
               ]),
@@ -489,7 +593,8 @@ class _ProjectCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(3),
               ),
               const SizedBox(height: 6),
-              Text('${(progress * 100).toInt()}% completed', style: TextStyle(fontSize: AppFontSizes.bodySmall)),
+              Text('${(progress * 100).toInt()}% completed',
+                  style: TextStyle(fontSize: AppFontSizes.bodySmall)),
             ],
           ),
         ),
