@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../models/task.dart';
+import '../services/current_user.dart';
 import '../widgets/tag_selector.dart';
 import '../theme.dart';
 
@@ -11,6 +12,9 @@ class CreateTaskScreen extends StatefulWidget {
   final List<String> memberIds;
   final Map<String, String> memberNames;
   final Map<String, int> memberTaskCount;
+  final String? parentTaskId;
+  final String? defaultAssignee;
+  final DateTime? defaultDeadline;
 
   const CreateTaskScreen({
     super.key,
@@ -19,6 +23,9 @@ class CreateTaskScreen extends StatefulWidget {
     required this.memberIds,
     required this.memberNames,
     required this.memberTaskCount,
+    this.parentTaskId,
+    this.defaultAssignee,
+    this.defaultDeadline,
   });
 
   @override
@@ -42,10 +49,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedDate = widget.projectDeadline;
+    _selectedDate = widget.defaultDeadline ?? widget.projectDeadline;
     _selectedPriority = Priority.medium;
 
-    // 计算推荐成员（任务数最少的成员）
     if (widget.memberIds.isNotEmpty) {
       int minTasks = widget.memberTaskCount[widget.memberIds.first] ?? 0;
       String recommendedId = widget.memberIds.first;
@@ -58,7 +64,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       }
       _recommendedMemberId = recommendedId;
       _recommendedMemberName = widget.memberNames[recommendedId] ?? recommendedId;
-      _selectedMemberId = recommendedId;
+      _selectedMemberId = widget.defaultAssignee ?? recommendedId;
     } else {
       _selectedMemberId = '';
     }
@@ -93,6 +99,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       priority: _selectedPriority,
       tags: _selectedTags,
       estimatedHours: 0,
+      createdBy: CurrentUser.memberId ?? '',
+      parentTaskId: widget.parentTaskId,
     );
 
     if (mounted) {
@@ -119,16 +127,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Task'),
+        title: Text(widget.parentTaskId != null ? 'Add Subtask' : 'Create Task'),
         actions: [
           IconButton(
-            icon: _isSaving
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-                : const Icon(Icons.check),
+            icon: _isSaving ? const SizedBox(width:20,height:20,child: CircularProgressIndicator(strokeWidth:2)) : const Icon(Icons.check),
             onPressed: _isSaving ? null : _save,
           ),
         ],
@@ -145,12 +147,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 decoration: InputDecoration(
                   labelText: 'Task Title *',
                   prefixIcon: const Icon(Icons.title),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 autofocus: true,
-                validator: (v) =>
-                v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -158,32 +158,23 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 decoration: InputDecoration(
                   labelText: 'Description (optional)',
                   prefixIcon: const Icon(Icons.description_outlined),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 20),
-              if (_recommendedMemberName != null)
+              if (_recommendedMemberName != null && widget.parentTaskId == null)
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.auto_awesome,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Recommended: $_recommendedMemberName',
-                          style: TextStyle(fontSize: 13, color: AppColors.primary),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: Row(children: [
+                    Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Recommended: $_recommendedMemberName', style: TextStyle(fontSize: 13, color: AppColors.primary))),
+                  ]),
                 ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -191,13 +182,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 decoration: InputDecoration(
                   labelText: 'Assign to',
                   prefixIcon: const Icon(Icons.person_outline),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                items: widget.memberIds.map((id) {
-                  final name = widget.memberNames[id] ?? id;
-                  return DropdownMenuItem(value: id, child: Text(name));
-                }).toList(),
+                items: widget.memberIds.map((id) => DropdownMenuItem(value: id, child: Text(widget.memberNames[id] ?? id))).toList(),
                 onChanged: (v) => setState(() => _selectedMemberId = v!),
                 validator: (v) => v == null ? 'Please select a member' : null,
               ),
@@ -217,32 +204,20 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 decoration: InputDecoration(
                   labelText: 'Priority',
                   prefixIcon: const Icon(Icons.flag_outlined),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                items: Priority.values
-                    .map((p) => DropdownMenuItem(
-                    value: p,
-                    child: Row(children: [
-                      Icon(Icons.circle,
-                          size: 12,
-                          color: p == Priority.high
-                              ? AppColors.error
-                              : p == Priority.medium
-                              ? AppColors.warning
-                              : AppColors.info),
-                      const SizedBox(width: 8),
-                      Text(p.name.toUpperCase()),
-                    ])))
-                    .toList(),
+                items: Priority.values.map((p) => DropdownMenuItem(
+                  value: p,
+                  child: Row(children: [
+                    Icon(Icons.circle, size: 12, color: p == Priority.high ? AppColors.error : p == Priority.medium ? AppColors.warning : AppColors.info),
+                    const SizedBox(width: 8),
+                    Text(p.name.toUpperCase()),
+                  ]),
+                )).toList(),
                 onChanged: (v) => setState(() => _selectedPriority = v!),
               ),
               const SizedBox(height: 16),
-              Text('Tags',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Text('Tags', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               TagSelector(
                 selectedTags: _selectedTags,
@@ -258,8 +233,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       decoration: InputDecoration(
                         labelText: 'Add custom tag',
                         prefixIcon: const Icon(Icons.label_outline),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onSubmitted: (_) => _addCustomTag(),
                     ),
@@ -269,9 +243,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     onPressed: _addCustomTag,
                     icon: const Icon(Icons.add, size: 20),
                     label: const Text('Add'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    ),
+                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16)),
                   ),
                 ],
               ),
@@ -279,11 +251,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               ElevatedButton.icon(
                 onPressed: _isSaving ? null : _save,
                 icon: const Icon(Icons.check),
-                label: const Text('Create Task'),
+                label: Text(widget.parentTaskId != null ? 'Create Subtask' : 'Create Task'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
