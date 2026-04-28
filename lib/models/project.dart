@@ -1,23 +1,28 @@
-// project.dart – adjusted for Supabase
+import 'package:flutter/material.dart';
+import 'task.dart';
+import '../theme.dart';
+
 class Project {
   final String id;
   String name;
   String description;
   DateTime deadline;
-  final String createdBy;        // required, no default
+  final String createdBy;
   final DateTime createdAt;
   String status;
-  List<String> members;          // local only, not stored in projects table
+  List<String> members;
+  Map<String, dynamic>? settings;
 
   Project({
     required this.id,
     required this.name,
     this.description = '',
     required this.deadline,
-    required this.createdBy,     // now required
+    required this.createdBy,
     DateTime? createdAt,
     this.status = 'active',
-    this.members = const [],     // local use only
+    this.members = const [],
+    this.settings,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory Project.fromJson(Map<String, dynamic> json) {
@@ -29,7 +34,10 @@ class Project {
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       status: json['status'] as String? ?? 'active',
-      members: [],               // not loaded from projects table
+      members: [],
+      settings: json['settings'] is Map
+          ? Map<String, dynamic>.from(json['settings'] as Map)
+          : null,
     );
   }
 
@@ -42,11 +50,36 @@ class Project {
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'status': status,
-      // no 'members' here – it belongs to project_members table
+      'settings': settings,
     };
   }
 
-  // These toMap/fromMap are for local SQLite (if you still need them)
+  Color priorityColor(Priority priority) {
+    final colors = settings?['priorityColors'] as Map?;
+    if (colors != null) {
+      final colorHex = colors[priority.name];
+      if (colorHex != null && colorHex is String) {
+        return Color(int.parse(colorHex, radix: 16));
+      }
+    }
+    switch (priority) {
+      case Priority.high: return AppColors.error;
+      case Priority.medium: return AppColors.warning;
+      case Priority.low: return AppColors.info;
+    }
+  }
+
+  Color tagColor(String tag) {
+    final colors = settings?['tagColors'] as Map?;
+    if (colors != null && colors[tag] != null) {
+      final colorHex = colors[tag];
+      if (colorHex is String) {
+        return Color(int.parse(colorHex, radix: 16));
+      }
+    }
+    return AppColors.primary;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
