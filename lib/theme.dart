@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-// ======================= 颜色系统 =======================
 class AppColors {
   static const Color primary = Colors.green;
   static const Color primaryLight = Color(0xFFE8F5E9);
@@ -23,7 +22,6 @@ class AppColors {
   static Color priorityLow = info;
 }
 
-// ======================= 字体大小 =======================
 class AppFontSizes {
   static const double headlineLarge = 28.0;
   static const double headlineMedium = 24.0;
@@ -36,7 +34,6 @@ class AppFontSizes {
   static const double labelSmall = 10.0;
 }
 
-// ======================= 间距系统 =======================
 class AppSpacing {
   static const double xs = 4.0;
   static const double sm = 8.0;
@@ -45,7 +42,6 @@ class AppSpacing {
   static const double xl = 32.0;
 }
 
-// ======================= 圆角系统 =======================
 class AppBorderRadius {
   static const double small = 8.0;
   static const double medium = 12.0;
@@ -54,7 +50,6 @@ class AppBorderRadius {
   static const double full = 999.0;
 }
 
-// ======================= 全局主题 =======================
 final ThemeData classroomTheme = ThemeData(
   primarySwatch: Colors.green,
   scaffoldBackgroundColor: AppColors.scaffoldBackground,
