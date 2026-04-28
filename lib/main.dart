@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,13 +15,17 @@ void main() async{
       anonKey: 'sb_secret_QN6o1Rern0RLtP7bfF-UFw_ODJIJExP',
   );
 
-  // deep link handling
   final appLinks = AppLinks();
-  final initialLink = await appLinks.getInitialLink();
-  if (initialLink != null && initialLink.toString().contains('reset-password')) {
-    DeepLinkService.isResetLinkPending = true;
-    runApp(MyApp(initialRoute: 'reset', resetLink: initialLink));
-  } else {
+  // handle initial link (app not running)
+  try {
+    final initialLink = await appLinks.getInitialLink();
+    if (initialLink != null && initialLink.toString().contains('reset-password')) {
+      DeepLinkService.isResetLinkPending = true;
+      runApp(MyApp(initialRoute: 'reset', resetLink: initialLink));
+    } else {
+      runApp(const MyApp());
+    }
+  } catch (e) {
     runApp(const MyApp());
   }
 }
@@ -35,20 +41,60 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final AppLinks _appLinks;
+  late final StreamSubscription<AuthState> _authSubscription;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  String? _lastHandledResetLink;
+  bool _isResetScreenOpen = false;
 
   @override
   void initState() {
     super.initState();
     _appLinks = AppLinks();
+    _lastHandledResetLink = widget.resetLink?.toString();
+    _isResetScreenOpen = widget.initialRoute == 'reset' && widget.resetLink != null;
     // listen for deep links while app is running
     _appLinks.uriLinkStream.listen((Uri? uri) {
-      if (uri != null && uri.toString().contains('reset-password')) {
-        // if the reset password screen is not already open, open it
+      _handleIncomingLink(uri);
+    });
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      if (data.event == AuthChangeEvent.passwordRecovery && !_isResetScreenOpen) {
         DeepLinkService.isResetLinkPending = true;
-        _navigatorKey.currentState?.pushNamed('/reset', arguments: uri);
+        _isResetScreenOpen = true;
+        _navigatorKey.currentState
+            ?.pushNamed('/reset')
+            .whenComplete(() => _isResetScreenOpen = false);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
+  void _handleIncomingLink(Uri? uri) {
+    if (uri == null || !uri.toString().contains('reset-password')) return;
+
+    final uriString = uri.toString();
+    if (_isResetScreenOpen || _lastHandledResetLink == uriString) {
+      return;
+    }
+
+    DeepLinkService.isResetLinkPending = true;
+    _lastHandledResetLink = uriString;
+    _isResetScreenOpen = true;
+
+    _navigatorKey.currentState
+        ?.pushNamed('/reset', arguments: uri)
+        .whenComplete(() {
+          _isResetScreenOpen = false;
+          if (!DeepLinkService.isResetLinkPending) {
+            _lastHandledResetLink = null;
+          }
+        });
   }
 
   @override
@@ -59,17 +105,20 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
       initialRoute: widget.initialRoute == 'reset' ? '/reset' : '/',
-      routes: {
-        '/': (context) => const AuthWrapper(),
-        '/reset': (context) => ResetPasswordScreen(link: widget.resetLink!),
-      },
       onGenerateRoute: (settings) {
-        if (settings.name == '/reset' && settings.arguments is Uri) {
+        if (settings.name == '/reset') {
+          final link = settings.arguments as Uri? ?? widget.resetLink;
+          final hasRecoverySession =
+              Supabase.instance.client.auth.currentSession != null;
+          if (link == null && !hasRecoverySession) {
+            return MaterialPageRoute(builder: (_) => const AuthWrapper());
+          }
           return MaterialPageRoute(
-            builder: (context) => ResetPasswordScreen(link: settings.arguments as Uri),
+            builder: (_) => ResetPasswordScreen(link: link),
           );
         }
-        return null;
+        // Default route
+        return MaterialPageRoute(builder: (_) => const AuthWrapper());
       },
     );
   }

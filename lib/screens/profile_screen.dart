@@ -27,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _memberData;
   final ImagePicker _picker = ImagePicker();
 
-  static const int maxAvatarSizeMB = 2;
+  static const int maxAvatarSizeMB = 10;
   static const int maxAvatarSizeBytes = maxAvatarSizeMB * 1024 * 1024;
 
   @override

@@ -46,7 +46,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   late DateTime _selectedDeadline;
   late Priority _selectedPriority;
   late int _progressPercent;
-  late int _estimatedHours;
   late List<String> _selectedTags;
 
   List<String> _memberIds = [];
@@ -194,7 +193,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     _selectedDeadline = _task.deadline;
     _selectedPriority = _task.priority;
     _progressPercent = _task.progressPercent;
-    _estimatedHours = _task.estimatedHours;
     _selectedTags = List.from(_task.tags);
   }
 
@@ -209,7 +207,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     _task.deadline = _selectedDeadline;
     _task.priority = _selectedPriority;
     _task.progressPercent = _progressPercent;
-    _task.estimatedHours = _estimatedHours;
     _task.tags = _selectedTags;
     final wasCompleted = _task.isCompleted;
     _task.isCompleted = _progressPercent == 100;
@@ -288,7 +285,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       widget.onTaskUpdated(_task);
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(newStatus ? 'Task marked as complete' : 'Task reopened')),
+        SnackBar(content: Text(newStatus ? 'Task completed' : 'Task reopened')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -383,7 +380,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  // ---------- Detail View ----------
   Widget _buildDetailView() {
     final completedSubtasks = _subtasks.where((s) => s.isCompleted).length;
     final subtaskProgress =
@@ -402,8 +398,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       slivers: [
         SliverAppBar(
           pinned: true,
-          expandedHeight: 120,
+          expandedHeight: 80,
           backgroundColor: AppColors.primaryLight,
+          flexibleSpace: FlexibleSpaceBar(
+            titlePadding: const EdgeInsets.only(left: 72, bottom: 16, right: 16),
+            title: Text(
+              _task.title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+            background: Container(color: AppColors.primaryLight),
+          ),
           actions: [
             if (canDelete)
               IconButton(
@@ -412,45 +417,23 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 tooltip: 'Delete task',
               ),
           ],
-          flexibleSpace: FlexibleSpaceBar(
-            title: Row(children: [
-              Expanded(
-                child: Text(_task.title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600)),
-              ),
-              if (_task.risk == RiskLevel.high)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Icon(Icons.warning_amber_rounded,
-                      color: AppColors.error, size: 20),
-                ),
-            ]),
-            background: Container(
-              alignment: Alignment.bottomLeft,
-              padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(_task.title,
-                          style: const TextStyle(
-                              fontSize: 22, fontWeight: FontWeight.bold)),
-                    ),
-                    if (_task.risk == RiskLevel.high)
-                      const Icon(Icons.warning_amber_rounded,
-                          color: AppColors.error, size: 24),
-                  ]),
-                  const SizedBox(height: 4),
-                  Text(
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.folder_outlined, size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
                     'Project: $projectName',
-                    style: TextStyle(
-                        fontSize: 14, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                   ),
-                ],
-              ),
+                ),
+                if (_task.risk == RiskLevel.high)
+                  const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 20),
+              ],
             ),
           ),
         ),
@@ -460,58 +443,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             delegate: SliverChildListDelegate([
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      if (!_task.isCompleted &&
-                          _task.actualStartDate == null)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _startTask,
-                            icon: const Icon(Icons.play_arrow),
-                            label: const Text('Start Task'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.info,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      if (!_task.isCompleted &&
-                          _task.actualStartDate != null)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _toggleComplete,
-                            icon: const Icon(Icons.check_circle_outline),
-                            label: const Text('Mark Complete'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      if (_task.isCompleted) ...[
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: null,
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text('Completed'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.success,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _toggleComplete,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Reopen'),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  padding: const EdgeInsets.all(12.0),
+                  child: _buildActionButtons(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -521,9 +454,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Overview',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600)),
+                      const Text('Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
                       _buildOverviewGrid(assigneeName, priorityColor),
                     ],
@@ -537,9 +468,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Progress',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600)),
+                      const Text('Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -552,14 +481,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 CircularProgressIndicator(
                                   value: _task.progressPercent / 100,
                                   backgroundColor: AppColors.divider,
-                                  color: _task.isCompleted
-                                      ? AppColors.success
-                                      : AppColors.primary,
+                                  color: _task.isCompleted ? AppColors.success : AppColors.primary,
                                   strokeWidth: 8,
                                 ),
-                                Text('${_task.progressPercent}%',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold)),
+                                FittedBox(
+                                  child: Text('${_task.progressPercent}%',
+                                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ),
                               ],
                             ),
                           ),
@@ -571,17 +499,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 if (_task.actualStartDate != null)
                                   Text(
                                     'Started: ${DateFormat('MM/dd HH:mm').format(_task.actualStartDate!)}',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: AppColors.textSecondary),
+                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                                   ),
                                 if (_task.completedAt != null) ...[
                                   const SizedBox(height: 4),
                                   Text(
                                     'Completed: ${DateFormat('MM/dd HH:mm').format(_task.completedAt!)}',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: AppColors.success),
+                                    style: TextStyle(fontSize: 13, color: AppColors.success),
                                   ),
                                 ],
                               ],
@@ -601,9 +525,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Description',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w600)),
+                        const Text('Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Text(_task.description),
                       ],
@@ -617,12 +539,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Description',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w600)),
+                        const Text('Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
-                        Text('No description provided.',
-                            style: TextStyle(color: AppColors.textHint)),
+                        Text('No description provided.', style: TextStyle(color: AppColors.textHint)),
                       ],
                     ),
                   ),
@@ -637,9 +556,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       children: [
                         Row(
                           children: [
-                            const Text('Subtasks',
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.w600)),
+                            const Text('Subtasks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                             const Spacer(),
                             TextButton.icon(
                               onPressed: _addSubtask,
@@ -656,27 +573,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             color: AppColors.primary,
                           ),
                         const SizedBox(height: 8),
-                        Text(
-                            '$completedSubtasks of ${_subtasks.length} subtasks completed',
-                            style: TextStyle(
-                                color: AppColors.textSecondary)),
+                        Text('$completedSubtasks of ${_subtasks.length} subtasks completed',
+                            style: TextStyle(color: AppColors.textSecondary)),
                         const SizedBox(height: 8),
                         if (_subtasks.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                              child: Text('No subtasks yet',
-                                  style: TextStyle(
-                                      color: AppColors.textHint)),
-                            ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(child: Text('No subtasks yet', style: TextStyle(color: AppColors.textHint))),
                           )
                         else
                           ..._subtasks.map((sub) {
-                            final subAssigneeName =
-                                _memberNames[sub.assignedTo] ?? sub.assignedTo;
+                            final subAssigneeName = _memberNames[sub.assignedTo] ?? sub.assignedTo;
                             final subPriorityColor =
-                                project?.priorityColor(sub.priority) ??
-                                    _defaultPriorityColor(sub.priority);
+                                project?.priorityColor(sub.priority) ?? _defaultPriorityColor(sub.priority);
                             return ListTile(
                               dense: true,
                               leading: Container(
@@ -688,22 +597,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 ),
                               ),
                               title: Row(children: [
-                                Expanded(
-                                  child: Text(
-                                    sub.title,
-                                    style: TextStyle(
-                                      decoration: sub.isCompleted
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                  ),
-                                ),
+                                Expanded(child: Text(sub.title, style: TextStyle(decoration: sub.isCompleted ? TextDecoration.lineThrough : null))),
                                 if (sub.risk == RiskLevel.high)
-                                  const Icon(Icons.warning_amber_rounded,
-                                      color: AppColors.error, size: 14),
+                                  const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 14),
                               ]),
-                              subtitle: Text(
-                                  '$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}'),
+                              subtitle: Text('$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}'),
                               onTap: () => _openSubtaskDetail(sub),
                             );
                           }),
@@ -719,9 +617,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Tags',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w600)),
+                        const Text('Tags', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
@@ -748,29 +644,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     children: [
                       Row(
                         children: [
-                          const Text('Comments',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w600)),
+                          const Text('Comments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                           const Spacer(),
-                          Text('${_comments.length}',
-                              style: TextStyle(
-                                  color: AppColors.textSecondary)),
+                          Text('${_comments.length}', style: TextStyle(color: AppColors.textSecondary)),
                         ],
                       ),
                       const SizedBox(height: 12),
                       if (_comments.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: Text('No comments yet',
-                                style: TextStyle(color: AppColors.textHint)),
-                          ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(child: Text('No comments yet', style: TextStyle(color: AppColors.textHint))),
                         )
                       else
                         ..._comments.map((c) => _CommentTile(
                           comment: c,
-                          isOwner: c.author ==
-                              (CurrentUser.name ?? CurrentUser.email),
+                          isOwner: c.author == (CurrentUser.name ?? CurrentUser.email),
                           onEdit: () => _editComment(c),
                           onDelete: () => _deleteComment(c),
                         )),
@@ -787,8 +675,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.send_rounded,
-                                color: AppColors.primary),
+                            icon: const Icon(Icons.send_rounded, color: AppColors.primary),
                             onPressed: _addComment,
                           ),
                         ],
@@ -805,7 +692,69 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  // ---------- Edit Form ----------
+  Widget _buildActionButtons() {
+    if (!_task.isCompleted && _task.actualStartDate == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _startTask,
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Start Task'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.info,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      );
+    } else if (!_task.isCompleted && _task.actualStartDate != null) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _toggleComplete,
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('Mark Complete'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      );
+    } else {
+      return Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.check_circle),
+              label: const Text('Task Completed'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _toggleComplete,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reopen Task'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
   Widget _buildEditForm() {
     return Scaffold(
       appBar: AppBar(
@@ -870,16 +819,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               Text('$_progressPercent%', style: const TextStyle(fontWeight: FontWeight.bold)),
             ]),
             const SizedBox(height: 16),
-            TextFormField(
-              initialValue: _estimatedHours.toString(),
-              decoration: InputDecoration(
-                  labelText: 'Estimated Hours',
-                  prefixIcon: const Icon(Icons.timer_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-              keyboardType: TextInputType.number,
-              onSaved: (v) => _estimatedHours = int.tryParse(v ?? '0') ?? 0,
-            ),
-            const SizedBox(height: 16),
             Text('Tags', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             TagSelector(selectedTags: _selectedTags, onChanged: (tags) => setState(() => _selectedTags = tags)),
@@ -917,7 +856,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   Widget _buildOverviewGrid(String assigneeName, Color priorityColor) {
     final statusColor = _task.isCompleted ? AppColors.success : AppColors.warning;
-
     return Column(
       children: [
         Row(
@@ -986,6 +924,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 }
 
+// ---------- CommentTile ----------
 class _CommentTile extends StatelessWidget {
   final Comment comment;
   final bool isOwner;

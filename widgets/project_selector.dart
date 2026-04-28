@@ -1,3 +1,4 @@
+import 'package:assignment/models/project.dart';
 import 'package:flutter/material.dart';
 import '../models/project.dart';
 
@@ -6,7 +7,7 @@ class ProjectSelector extends StatelessWidget {
   final Project? selectedProject;
   final ValueChanged<Project?> onChanged;
   final String hint;
-  final int? memberCount;
+  final int Function(Project) getMemberCount;
 
   const ProjectSelector({
     super.key,
@@ -14,7 +15,7 @@ class ProjectSelector extends StatelessWidget {
     required this.selectedProject,
     required this.onChanged,
     this.hint = 'Select project',
-    this.memberCount,
+    required this.getMemberCount,
   });
 
   @override
@@ -64,9 +65,8 @@ class ProjectSelector extends StatelessWidget {
                     ),
                     if (selectedProject != null)
                       Text(
-                        '${memberCount ?? 0} members • Deadline: ${_formatDate(selectedProject!.deadline)}',
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade600),
+                        '${getMemberCount(selectedProject!)} members • Deadline: ${_formatDate(selectedProject!.deadline)}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                       ),
                   ],
                 ),
@@ -130,7 +130,7 @@ class ProjectSelector extends StatelessWidget {
                           style: TextStyle(
                               fontWeight:
                               isSelected ? FontWeight.bold : FontWeight.normal)),
-                      subtitle: Text('${memberCount ?? 0} members'),
+                      subtitle: Text('${getMemberCount(project)} members'),
                       trailing: isSelected
                           ? const Icon(Icons.check, color: Colors.green)
                           : null,

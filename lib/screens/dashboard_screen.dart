@@ -360,6 +360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    // 在 _DashboardScreenState 的 build 方法中
     final tabs = [
       StreamTab(
         projects: projects,
@@ -372,11 +373,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       PeopleTab(
         projects: projects,
         onRefresh: _loadData,
+        getMemberCount: getProjectMemberCount,
       ),
       GradesTab(
         projects: projects,
         tasks: tasks,
         onRefresh: _loadData,
+        getMemberCount: getProjectMemberCount,
       ),
       FilesTab(
         projects: projects,

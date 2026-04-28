@@ -18,7 +18,15 @@ class GradesTab extends StatefulWidget {
   final List<Project> projects;
   final List<Task> tasks;
   final Future<void> Function() onRefresh;
-  const GradesTab({super.key, required this.projects, required this.tasks, required this.onRefresh});
+  final int Function(Project) getMemberCount;
+
+  const GradesTab({
+    super.key,
+    required this.projects,
+    required this.tasks,
+    required this.onRefresh,
+    required this.getMemberCount,
+  });
   @override
   State<GradesTab> createState() => _GradesTabState();
 }
@@ -120,8 +128,7 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
             projects: widget.projects,
             selectedProject: _selectedProject,
             onChanged: (p) { setState(() => _selectedProject = p); if (p != null) _loadMembersForProject(p.id); },
-            memberCount: _memberNames.length,
-          ),
+            getMemberCount: widget.getMemberCount,    ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -166,6 +173,7 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     );
   }
 
+  // ---------- Overview Tab ----------
   Widget _buildOverviewTab() {
     final tasks = projectTasks;
     final completed = tasks.where((t) => t.isCompleted).length;
@@ -291,16 +299,26 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
 
   Widget _buildWorkloadTab() {
     final tasks = projectTasks;
-    if (memberIds.isEmpty) return const Center(child: Text('No members in this project'));
+    if (memberIds.isEmpty) {
+      return const Center(child: Text('No members in this project'));
+    }
 
     final memberTasksCount = <String, int>{};
     for (var memberId in memberIds) {
       memberTasksCount[memberId] = tasks.where((t) => t.assignedTo == memberId).length;
     }
 
-    final sorted = memberTasksCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    if (memberTasksCount.values.every((v) => v == 0)) {
+      return const Center(child: Text('No tasks assigned yet'));
+    }
+
+    final sorted = memberTasksCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final busiest = sorted.isNotEmpty ? sorted.first : null;
     final lightest = sorted.isNotEmpty ? sorted.last : null;
+
+    final maxTasks = memberTasksCount.values.reduce((a, b) => a > b ? a : b);
+    final double chartMaxY = maxTasks > 0 ? maxTasks.toDouble() + 1 : 2.0;
 
     Widget chart = Card(
       elevation: 2,
@@ -312,28 +330,52 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
           const SizedBox(height: 16),
           SizedBox(
             height: 250,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: BarChart(BarChartData(
+            child: BarChart(
+              BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: memberTasksCount.values.isEmpty ? 1 : memberTasksCount.values.reduce((a,b)=>a>b?a:b).toDouble() + 1,
+                maxY: chartMaxY,
                 titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
-                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
-                    final index = value.toInt();
-                    if (index < memberIds.length) {
-                      final name = _memberNames[memberIds[index]] ?? memberIds[index];
-                      return Padding(padding: const EdgeInsets.only(top: 8), child: Text(name.length > 10 ? '${name.substring(0,10)}…' : name, style: const TextStyle(fontSize: 10)));
-                    }
-                    return const Text('');
-                  })),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 24,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index < memberIds.length) {
+                          final name = _memberNames[memberIds[index]] ?? memberIds[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              name.length > 10 ? '${name.substring(0, 10)}…' : name,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
                 ),
+                gridData: FlGridData(show: true, drawVerticalLine: false),
                 barGroups: memberIds.asMap().entries.map((entry) {
                   final index = entry.key;
                   final memberId = entry.value;
-                  return BarChartGroupData(x: index, barRods: [BarChartRodData(toY: (memberTasksCount[memberId]??0).toDouble(), color: AppColors.info, width: 20, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))]);
+                  return BarChartGroupData(
+                    x: index,
+                    barRods: [
+                      BarChartRodData(
+                        toY: (memberTasksCount[memberId] ?? 0).toDouble(),
+                        color: AppColors.info,
+                        width: 20,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
                 }).toList(),
-              )),
+              ),
             ),
           ),
         ]),
@@ -345,9 +387,19 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
       padding: const EdgeInsets.all(16),
       child: Column(children: [
         Row(children: [
-          Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [Icon(Icons.work, color: AppColors.error), Text('Busiest', style: TextStyle(color: AppColors.textSecondary)), Text(_memberNames[busiest?.key]??'N/A', style: TextStyle(fontWeight: FontWeight.bold)), Text('${busiest?.value??0} tasks')])))),
+          Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+            Icon(Icons.work, color: AppColors.error),
+            Text('Busiest', style: TextStyle(color: AppColors.textSecondary)),
+            Text(_memberNames[busiest?.key] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${busiest?.value ?? 0} tasks'),
+          ])))),
           const SizedBox(width: 16),
-          Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [Icon(Icons.beach_access, color: AppColors.success), Text('Lightest', style: TextStyle(color: AppColors.textSecondary)), Text(_memberNames[lightest?.key]??'N/A', style: TextStyle(fontWeight: FontWeight.bold)), Text('${lightest?.value??0} tasks')])))),
+          Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+            Icon(Icons.beach_access, color: AppColors.success),
+            Text('Lightest', style: TextStyle(color: AppColors.textSecondary)),
+            Text(_memberNames[lightest?.key] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${lightest?.value ?? 0} tasks'),
+          ])))),
         ]),
         const SizedBox(height: 16),
         chart,
@@ -355,7 +407,7 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     );
   }
 
-  int _calculateHealthScore(List<Task> tasks) { /* 不再使用 */ return 100; }
-  Color _getHealthColor(int score) { /* 不再使用 */ return AppColors.success; }
-  String _getHealthMessage(int score) { /* 不再使用 */ return ''; }
+  int _calculateHealthScore(List<Task> tasks) => 100;
+  Color _getHealthColor(int score) => AppColors.success;
+  String _getHealthMessage(int score) => '';
 }
