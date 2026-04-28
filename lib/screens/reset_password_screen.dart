@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/deep_link_service.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final Uri link;
@@ -15,6 +16,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _confirmController = TextEditingController();
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    // Clear the flag if the user leaves without resetting (e.g., presses back)
+    DeepLinkService.isResetLinkPending = false;
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
   Future<void> _resetPassword() async {
     if (_passwordController.text != _confirmController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -22,29 +32,26 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
     try {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _passwordController.text.trim()),
       );
+      // clear the pending reset flag after successful change
+      DeepLinkService.isResetLinkPending = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset successfully. Please log in.')),
+      );
+      await Supabase.instance.client.auth.signOut();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password reset successfully! Please log in.')),
-        );
-        await Supabase.instance.client.auth.signOut();
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-        }
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
-    if (mounted) setState(() => _isLoading = false);
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -83,12 +90,5 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    _confirmController.dispose();
-    super.dispose();
   }
 }

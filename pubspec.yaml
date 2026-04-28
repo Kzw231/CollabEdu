@@ -25,6 +25,13 @@ dependencies:
   app_links: ^6.4.1   # handles deep links
   file_picker: ^8.0.0
   open_file: ^3.3.2
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.0.1
+  share_plus: ^12.0.0
+  screenshot: ^3.0.0
+  flutter_image_compress: ^2.3.0
+  cached_network_image: ^3.3.0
+  connectivity_plus: ^6.0.0
 
 dev_dependencies:
   flutter_test:
