@@ -368,23 +368,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onProjectTap: _navigateToProjectDetail,
         onProjectEdit: editProject,
         onRefresh: _loadData,
-        getMemberCount: getProjectMemberCount,          // 已有的，无需改
+        getMemberCount: getProjectMemberCount,          
       ),
       PeopleTab(
         projects: projects,
         onRefresh: _loadData,
-        getMemberCount: getProjectMemberCount,          // ✅ 新增参数
+        getMemberCount: getProjectMemberCount,         
       ),
       GradesTab(
         projects: projects,
         tasks: tasks,
         onRefresh: _loadData,
-        getMemberCount: getProjectMemberCount,          // ✅ 新增参数
+        getMemberCount: getProjectMemberCount,          
       ),
       FilesTab(
         projects: projects,
         onRefresh: _loadData,
-        getMemberCount: getProjectMemberCount,          // 已有的，无需改
+        getMemberCount: getProjectMemberCount,         
       ),
     ];
 
