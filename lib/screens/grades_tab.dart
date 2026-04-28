@@ -18,14 +18,14 @@ class GradesTab extends StatefulWidget {
   final List<Project> projects;
   final List<Task> tasks;
   final Future<void> Function() onRefresh;
-  final int Function(Project) getMemberCount;   // ✅ 新增
+  final int Function(Project) getMemberCount;   
 
   const GradesTab({
     super.key,
     required this.projects,
     required this.tasks,
     required this.onRefresh,
-    required this.getMemberCount,               // ✅ 新增
+    required this.getMemberCount,             
   });
   @override
   State<GradesTab> createState() => _GradesTabState();
@@ -297,7 +297,6 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------- Workload Tab (完全修复) ----------
   Widget _buildWorkloadTab() {
     final tasks = projectTasks;
     if (memberIds.isEmpty) {
@@ -318,7 +317,6 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     final busiest = sorted.isNotEmpty ? sorted.first : null;
     final lightest = sorted.isNotEmpty ? sorted.last : null;
 
-    // 计算合理的 maxY，至少为 1，避免除零
     final maxTasks = memberTasksCount.values.reduce((a, b) => a > b ? a : b);
     final double chartMaxY = maxTasks > 0 ? maxTasks.toDouble() + 1 : 2.0;
 
@@ -409,7 +407,6 @@ class _GradesTabState extends State<GradesTab> with SingleTickerProviderStateMix
     );
   }
 
-  // 为了兼容性保留的占位方法（可删除，不影响）
   int _calculateHealthScore(List<Task> tasks) => 100;
   Color _getHealthColor(int score) => AppColors.success;
   String _getHealthMessage(int score) => '';
