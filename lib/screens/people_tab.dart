@@ -5,6 +5,7 @@ import '../services/current_user.dart';
 import '../services/member_lookup.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/project_selector.dart';
+import 'qr_scanner_screen.dart';
 
 class _ProjectMemberRow {
   final String memberId;
@@ -31,21 +32,28 @@ class PeopleTab extends StatefulWidget {
 }
 
 class _PeopleTabState extends State<PeopleTab> {
-  Project? _selectedProject;
   List<_ProjectMemberRow> _rows = [];
   bool _loadingMembers = false;
   int _loadGen = 0;
+  String? _selectedProjectId;
 
   Project? get _currentProject {
     if (widget.projects.isEmpty) return null;
-    final sel = _selectedProject;
-    if (sel != null && widget.projects.any((p) => p.id == sel.id)) return sel;
+    if (_selectedProjectId != null) {
+      return widget.projects.firstWhere(
+            (p) => p.id == _selectedProjectId,
+        orElse: () => widget.projects.first,
+      );
+    }
     return widget.projects.first;
   }
 
   @override
   void initState() {
     super.initState();
+    if (widget.projects.isNotEmpty) {
+      _selectedProjectId = widget.projects.first.id;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMembersForCurrent());
   }
 
@@ -53,23 +61,19 @@ class _PeopleTabState extends State<PeopleTab> {
   void didUpdateWidget(covariant PeopleTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.projects.isEmpty) {
-      if (_rows.isNotEmpty) setState(() => _rows = []);
+      _selectedProjectId = null;
       return;
     }
-    if (_selectedProject != null &&
-        !widget.projects.any((p) => p.id == _selectedProject!.id)) {
-      _selectedProject = null;
+    if (_selectedProjectId == null || !widget.projects.any((p) => p.id == _selectedProjectId)) {
+      _selectedProjectId = widget.projects.first.id;
     }
-    if (oldWidget.projects != widget.projects) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMembersForCurrent());
-    }
+    _loadMembersForCurrent();
   }
 
   Future<void> _loadMembersForCurrent() async {
     final project = _currentProject;
     if (project == null) return;
     final gen = ++_loadGen;
-    // ✅ 立即清空旧数据并显示加载状态
     setState(() {
       _rows = [];
       _loadingMembers = true;
@@ -170,7 +174,6 @@ class _PeopleTabState extends State<PeopleTab> {
 
     try {
       final member = await lookupMemberByIdOrEmail(input);
-
       if (member == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -179,16 +182,13 @@ class _PeopleTabState extends State<PeopleTab> {
         }
         return;
       }
-
       final memberId = member['id'] as String;
-
       final existing = await Supabase.instance.client
           .from('project_members')
           .select('member_id')
           .eq('project_id', project.id)
           .eq('member_id', memberId)
           .maybeSingle();
-
       if (existing != null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -197,24 +197,121 @@ class _PeopleTabState extends State<PeopleTab> {
         }
         return;
       }
-
       await Supabase.instance.client.from('project_members').insert({
         'project_id': project.id,
         'member_id': memberId,
         'role': 'member',
       });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Added ${member['name'] ?? memberId}')),
         );
         await _loadMembersForCurrent();
-        await widget.onRefresh();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not add member: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _scanAndInviteMember(Project project) async {
+    final scannedId = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (context) => const QrScannerScreen()),
+    );
+    if (scannedId == null || scannedId.isEmpty) return;
+
+    try {
+      final member = await lookupMemberByIdOrEmail(scannedId);
+      if (member == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No member found for that QR code.')),
+          );
+        }
+        return;
+      }
+      final memberId = member['id'] as String;
+      final existing = await Supabase.instance.client
+          .from('project_members')
+          .select('member_id')
+          .eq('project_id', project.id)
+          .eq('member_id', memberId)
+          .maybeSingle();
+      if (existing != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('That person is already on this project.')),
+          );
+        }
+        return;
+      }
+      await Supabase.instance.client.from('project_members').insert({
+        'project_id': project.id,
+        'member_id': memberId,
+        'role': 'member',
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added ${member['name'] ?? memberId}')),
+        );
+        await _loadMembersForCurrent();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not add member: $e')),
+        );
+      }
+    }
+  }
+
+  bool _canDeleteMember(_ProjectMemberRow member, Project project) {
+    // Cannot delete yourself
+    if (member.memberId == CurrentUser.memberId) return false;
+    // Cannot delete the project owner unless you are the owner
+    if (member.memberId == project.createdBy && CurrentUser.memberId != project.createdBy) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _confirmRemoveMember(_ProjectMemberRow member, Project project) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove member'),
+        content: Text('Remove ${member.name} from "${project.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await Supabase.instance.client
+          .from('project_members')
+          .delete()
+          .eq('project_id', project.id)
+          .eq('member_id', member.memberId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed ${member.name} from the project')),
+        );
+        await _loadMembersForCurrent(); // ✅ only update local list
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove member: $e')),
         );
       }
     }
@@ -250,12 +347,15 @@ class _PeopleTabState extends State<PeopleTab> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: ProjectSelector(
-              key: ValueKey(currentProject.id),
+              key: ValueKey(_selectedProjectId ?? widget.projects.first.id),
               projects: widget.projects,
-              selectedProject: currentProject,
+              selectedProject: _currentProject,
               onChanged: (p) {
-                setState(() => _selectedProject = p);
-                _loadMembersForCurrent();
+                if (p != null) {
+                  _selectedProjectId = p.id;
+                  setState(() {});
+                  _loadMembersForCurrent();
+                }
               },
               memberCount: _rows.length,
             ),
@@ -273,6 +373,12 @@ class _PeopleTabState extends State<PeopleTab> {
                   onPressed: () => _showInviteDialog(currentProject),
                   icon: const Icon(Icons.person_add, size: 18),
                   label: const Text('Invite'),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.qr_code_scanner),
+                  tooltip: 'Scan member QR code',
+                  onPressed: () => _scanAndInviteMember(currentProject),
                 ),
               ],
             ),
@@ -296,9 +402,13 @@ class _PeopleTabState extends State<PeopleTab> {
                     ..._rows.map((row) {
                       final isYou = row.memberId == CurrentUser.memberId;
                       final isCreator = row.memberId == currentProject.createdBy;
-                      String subtitle = row.role;
-                      if (isCreator) subtitle = 'Owner · $subtitle';
-                      if (isYou) subtitle = '$subtitle · You';
+                      String roleText = row.role;
+                      if (isCreator) roleText = 'Owner · $roleText';
+                      if (isYou) roleText = '$roleText · You';
+                      final subtitle = [
+                        if (row.email != null && row.email!.isNotEmpty) row.email!,
+                        roleText,
+                      ].join(' · ');
                       return ListTile(
                         leading: CircleAvatar(
                           child: Text(
@@ -306,12 +416,14 @@ class _PeopleTabState extends State<PeopleTab> {
                           ),
                         ),
                         title: Text(row.name),
-                        subtitle: Text(
-                          [
-                            if (row.email != null && row.email!.isNotEmpty) row.email!,
-                            subtitle,
-                          ].join(' · '),
-                        ),
+                        subtitle: Text(subtitle),
+                        trailing: _canDeleteMember(row, currentProject)
+                            ? IconButton(
+                          icon: const Icon(Icons.person_remove, color: Colors.red),
+                          tooltip: 'Remove from project',
+                          onPressed: () => _confirmRemoveMember(row, currentProject),
+                        )
+                            : null,
                       );
                     }),
                 ],
