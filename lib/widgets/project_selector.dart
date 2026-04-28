@@ -6,7 +6,7 @@ class ProjectSelector extends StatelessWidget {
   final Project? selectedProject;
   final ValueChanged<Project?> onChanged;
   final String hint;
-  final int Function(Project) getMemberCount;              // ✅ 改为函数
+  final int Function(Project) getMemberCount;             
 
   const ProjectSelector({
     super.key,
@@ -14,7 +14,7 @@ class ProjectSelector extends StatelessWidget {
     required this.selectedProject,
     required this.onChanged,
     this.hint = 'Select project',
-    required this.getMemberCount,                          // 新增必需参数
+    required this.getMemberCount,                         
   });
 
   @override
@@ -129,7 +129,7 @@ class ProjectSelector extends StatelessWidget {
                           style: TextStyle(
                               fontWeight:
                               isSelected ? FontWeight.bold : FontWeight.normal)),
-                      subtitle: Text('${getMemberCount(project)} members'),   // ← 每个项目显示自己的成员数
+                      subtitle: Text('${getMemberCount(project)} members'),   
                       trailing: isSelected
                           ? const Icon(Icons.check, color: Colors.green)
                           : null,
