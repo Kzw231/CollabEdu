@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/project.dart';
 import '../models/task.dart';
-import '../services/database_helper.dart';
 import '../theme.dart';
 import 'task_detail_screen.dart';
 
@@ -13,6 +13,7 @@ class StreamTab extends StatefulWidget {
   final Function(Project) onProjectLongPress;
   final Function(Project) onProjectDoubleTap;
   final Future<void> Function() onRefresh;
+  final int Function(Project) getMemberCount;
 
   const StreamTab({
     super.key,
@@ -22,6 +23,7 @@ class StreamTab extends StatefulWidget {
     required this.onProjectLongPress,
     required this.onProjectDoubleTap,
     required this.onRefresh,
+    required this.getMemberCount,
   });
 
   @override
@@ -31,7 +33,7 @@ class StreamTab extends StatefulWidget {
 class _StreamTabState extends State<StreamTab> {
   final ScrollController _scrollController = ScrollController();
   bool _showBackToTop = false;
-  final _dbHelper = DatabaseHelper();
+  final _supabase = Supabase.instance.client;
 
   @override
   void initState() {
@@ -52,7 +54,9 @@ class _StreamTabState extends State<StreamTab> {
   }
 
   double _getProgress(Project p) {
-    final projectTasks = widget.tasks.where((t) => t.projectId == p.id && t.parentTaskId == null).toList();
+    final projectTasks = widget.tasks
+        .where((t) => t.projectId == p.id && t.parentTaskId == null)
+        .toList();
     if (projectTasks.isEmpty) return 0;
     int completed = projectTasks.where((t) => t.isCompleted).length;
     return completed / projectTasks.length;
@@ -62,7 +66,8 @@ class _StreamTabState extends State<StreamTab> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return widget.tasks.where((t) {
-      final deadlineDate = DateTime(t.deadline.year, t.deadline.month, t.deadline.day);
+      final deadlineDate =
+      DateTime(t.deadline.year, t.deadline.month, t.deadline.day);
       return deadlineDate == today;
     }).toList()
       ..sort((a, b) => a.deadline.compareTo(b.deadline));
@@ -103,16 +108,19 @@ class _StreamTabState extends State<StreamTab> {
           project: project,
           allTasks: widget.tasks,
           onTaskUpdated: (updated) async {
-            await _dbHelper.updateTask(updated);
-            setState(() {});
+            await _supabase
+                .from('tasks')
+                .update(updated.toJson())
+                .eq('id', updated.id);
+            await widget.onRefresh();
           },
           onTaskDeleted: () async {
-            await _dbHelper.deleteTask(task.id);
-            setState(() {});
+            await _supabase.from('tasks').delete().eq('id', task.id);
+            await widget.onRefresh();
           },
         ),
       ),
-    ).then((_) => setState(() {}));
+    );
   }
 
   @override
@@ -132,7 +140,9 @@ class _StreamTabState extends State<StreamTab> {
                 padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   'Your projects',
-                  style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: AppFontSizes.headlineSmall,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
               if (widget.projects.isEmpty)
@@ -144,6 +154,7 @@ class _StreamTabState extends State<StreamTab> {
                 ...widget.projects.map((p) => _ProjectCard(
                   project: p,
                   progress: _getProgress(p),
+                  memberCount: widget.getMemberCount(p),
                   onTap: () => widget.onProjectTap(p),
                   onLongPress: () => widget.onProjectLongPress(p),
                   onDoubleTap: () => widget.onProjectDoubleTap(p),
@@ -156,7 +167,12 @@ class _StreamTabState extends State<StreamTab> {
                     children: [
                       Icon(Icons.today, color: AppColors.primary),
                       SizedBox(width: 8),
-                      Text('Today\'s Tasks', style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600)),
+                      Text(
+                        'Today\'s Tasks',
+                        style: TextStyle(
+                            fontSize: AppFontSizes.headlineSmall,
+                            fontWeight: FontWeight.w600),
+                      ),
                     ],
                   ),
                 ),
@@ -172,7 +188,9 @@ class _StreamTabState extends State<StreamTab> {
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: Text(
                   'Upcoming tasks',
-                  style: TextStyle(fontSize: AppFontSizes.headlineSmall, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: AppFontSizes.headlineSmall,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
               if (upcoming.isEmpty)
@@ -213,7 +231,6 @@ class _StreamTabState extends State<StreamTab> {
   }
 }
 
-// 概览任务卡片（无复选框）
 class _StreamTaskCard extends StatelessWidget {
   final Task task;
   final List<Project> projects;
@@ -266,14 +283,17 @@ class _StreamTaskCard extends StatelessWidget {
             if (isSubtask)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Icon(Icons.subdirectory_arrow_right, size: 18, color: AppColors.textSecondary),
+                child: Icon(Icons.subdirectory_arrow_right,
+                    size: 18, color: AppColors.textSecondary),
               ),
             Expanded(
               child: Text(
                 task.title,
                 style: TextStyle(
-                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                  fontWeight: task.isCompleted ? FontWeight.normal : FontWeight.w500,
+                  decoration:
+                  task.isCompleted ? TextDecoration.lineThrough : null,
+                  fontWeight:
+                  task.isCompleted ? FontWeight.normal : FontWeight.w500,
                 ),
               ),
             ),
@@ -313,10 +333,10 @@ class _StreamTaskCard extends StatelessWidget {
   }
 }
 
-// 项目卡片
 class _ProjectCard extends StatelessWidget {
   final Project project;
   final double progress;
+  final int memberCount;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onDoubleTap;
@@ -324,6 +344,7 @@ class _ProjectCard extends StatelessWidget {
   const _ProjectCard({
     required this.project,
     required this.progress,
+    required this.memberCount,
     required this.onTap,
     required this.onLongPress,
     required this.onDoubleTap,
@@ -335,7 +356,8 @@ class _ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isNearDeadline = project.deadline.difference(DateTime.now()).inDays <= 2;
+    final bool isNearDeadline =
+        project.deadline.difference(DateTime.now()).inDays <= 2;
 
     return GestureDetector(
       onTap: onTap,
@@ -355,7 +377,9 @@ class _ProjectCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: AppFontSizes.bodyLarge,
                         fontWeight: FontWeight.w600,
-                        color: isNearDeadline ? AppColors.error : AppColors.textPrimary,
+                        color: isNearDeadline
+                            ? AppColors.error
+                            : AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -365,12 +389,16 @@ class _ProjectCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Deadline: ${_formatDate(project.deadline)}',
-                style: TextStyle(color: isNearDeadline ? AppColors.error : AppColors.textSecondary),
+                style: TextStyle(
+                    color:
+                    isNearDeadline ? AppColors.error : AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
               Text(
-                '${project.members.length} members',
-                style: TextStyle(fontSize: AppFontSizes.bodySmall, color: AppColors.textSecondary),
+                '$memberCount members',
+                style: TextStyle(
+                    fontSize: AppFontSizes.bodySmall,
+                    color: AppColors.textSecondary),
               ),
               const SizedBox(height: 12),
               LinearProgressIndicator(

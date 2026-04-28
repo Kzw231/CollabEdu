@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/project.dart';
 import '../models/task.dart';
-import '../services/database_helper.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/tag_selector.dart';
 import '../theme.dart';
@@ -15,13 +15,13 @@ enum TaskSortBy { deadline, title, assignee, priority }
 class ProjectDetailScreen extends StatefulWidget {
   final Project project;
   final List<Task> tasks;
-  final VoidCallback onTasksChanged;
+  final Future<void> Function() onRefresh;
 
   const ProjectDetailScreen({
     super.key,
     required this.project,
     required this.tasks,
-    required this.onTasksChanged,
+    required this.onRefresh,
   });
 
   @override
@@ -29,11 +29,62 @@ class ProjectDetailScreen extends StatefulWidget {
 }
 
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
-  final _dbHelper = DatabaseHelper();
+  final _supabase = Supabase.instance.client;
   bool showOnlyIncomplete = false;
   TaskSortBy _sortBy = TaskSortBy.deadline;
   bool _sortAscending = true;
   String _searchQuery = '';
+
+  List<String> _projectMemberIds = [];
+  Map<String, String> _memberNames = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProjectMembers();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProjectDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.project.id != widget.project.id) {
+      _loadProjectMembers();
+    }
+  }
+
+  Future<void> _loadProjectMembers() async {
+    try {
+      final links = await _supabase
+          .from('project_members')
+          .select('member_id')
+          .eq('project_id', widget.project.id);
+      final ids = (links as List).map((e) => e['member_id'] as String).toList();
+      if (ids.isEmpty) {
+        setState(() {
+          _projectMemberIds = [];
+          _memberNames.clear();
+        });
+        return;
+      }
+      final members = await _supabase
+          .from('members')
+          .select('id, name')
+          .inFilter('id', ids);
+      final map = <String, String>{};
+      for (final m in (members as List)) {
+        map[m['id']] = m['name'] ?? m['id'];
+      }
+      setState(() {
+        _projectMemberIds = ids;
+        _memberNames = map;
+      });
+    } catch (e) {
+      setState(() {
+        _projectMemberIds = [];
+        _memberNames.clear();
+      });
+    }
+  }
 
   List<Task> _sortAndFilterTasks(List<Task> tasks) {
     var filtered = tasks.where((t) {
@@ -50,25 +101,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     switch (_sortBy) {
       case TaskSortBy.deadline:
-        filtered.sort((a, b) => _sortAscending ? a.deadline.compareTo(b.deadline) : b.deadline.compareTo(a.deadline));
+        filtered.sort((a, b) => _sortAscending
+            ? a.deadline.compareTo(b.deadline)
+            : b.deadline.compareTo(a.deadline));
         break;
       case TaskSortBy.title:
-        filtered.sort((a, b) => _sortAscending ? a.title.compareTo(b.title) : b.title.compareTo(a.title));
+        filtered.sort((a, b) => _sortAscending
+            ? a.title.compareTo(b.title)
+            : b.title.compareTo(a.title));
         break;
       case TaskSortBy.assignee:
-        filtered.sort((a, b) => _sortAscending ? a.assignedTo.compareTo(b.assignedTo) : b.assignedTo.compareTo(a.assignedTo));
+        filtered.sort((a, b) => _sortAscending
+            ? a.assignedTo.compareTo(b.assignedTo)
+            : b.assignedTo.compareTo(a.assignedTo));
         break;
       case TaskSortBy.priority:
-        filtered.sort((a, b) => _sortAscending ? a.priority.index.compareTo(b.priority.index) : b.priority.index.compareTo(a.priority.index));
+        filtered.sort((a, b) => _sortAscending
+            ? a.priority.index.compareTo(b.priority.index)
+            : b.priority.index.compareTo(a.priority.index));
         break;
     }
     return filtered;
   }
 
-  Future<void> _refreshLocalTasks() async {
-    final allTasks = await _dbHelper.getAllTasks();
-    widget.tasks.clear();
-    widget.tasks.addAll(allTasks);
+  Future<void> _handleRefresh() async {
+    await widget.onRefresh();
+    await _loadProjectMembers();
     setState(() {});
   }
 
@@ -81,40 +139,50 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           project: widget.project,
           allTasks: widget.tasks,
           onTaskUpdated: (updatedTask) async {
-            await _dbHelper.updateTask(updatedTask);
-            await _refreshLocalTasks();
-            widget.onTasksChanged();
+            await _supabase
+                .from('tasks')
+                .update(updatedTask.toJson())
+                .eq('id', updatedTask.id);
+            await widget.onRefresh();
+            setState(() {});
           },
           onTaskDeleted: () async {
-            await _dbHelper.deleteTask(task.id);
-            await _refreshLocalTasks();
-            widget.onTasksChanged();
+            await _supabase.from('tasks').delete().eq('id', task.id);
+            await widget.onRefresh();
+            setState(() {});
           },
         ),
       ),
     );
-    await _refreshLocalTasks();
-    widget.onTasksChanged();
+    await widget.onRefresh();
+    setState(() {});
   }
 
   Future<void> _showCreateTaskDialog() async {
+    await _loadProjectMembers();
+
     final _formKey = GlobalKey<FormState>();
     final titleController = TextEditingController();
     final descController = TextEditingController();
 
-    final projectTasks = widget.tasks.where((t) => t.projectId == widget.project.id && t.parentTaskId == null).toList();
+    final projectTasks = widget.tasks
+        .where((t) => t.projectId == widget.project.id && t.parentTaskId == null)
+        .toList();
     final memberTaskCount = <String, int>{};
-    for (var member in widget.project.members) {
-      memberTaskCount[member] = projectTasks.where((t) => t.assignedTo == member).length;
+    for (var memberId in _projectMemberIds) {
+      memberTaskCount[memberId] =
+          projectTasks.where((t) => t.assignedTo == memberId).length;
     }
-    String recommendedMember = widget.project.members.isNotEmpty
+    String recommendedMemberId = _projectMemberIds.isNotEmpty
         ? memberTaskCount.entries.reduce((a, b) => a.value < b.value ? a : b).key
-        : 'You';
+        : '';
+    String recommendedMemberName = _memberNames[recommendedMemberId] ?? recommendedMemberId;
 
-    String selectedMember = recommendedMember;
+    String selectedMemberId = recommendedMemberId;
     DateTime selectedDate = widget.project.deadline;
     Priority selectedPriority = Priority.medium;
     List<String> selectedTags = [];
+    int estimatedHours = 0;
     bool isTitleValid = false;
 
     await showDialog(
@@ -159,17 +227,22 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     const SizedBox(height: 20),
                     const Text('Assign to', style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text('✨ Recommended: $recommendedMember (lightest workload)',
-                        style: TextStyle(fontSize: 12, color: AppColors.success)),
+                    if (recommendedMemberName.isNotEmpty)
+                      Text('✨ Recommended: $recommendedMemberName (lightest workload)',
+                          style: TextStyle(fontSize: 12, color: AppColors.success)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: selectedMember,
+                      value: selectedMemberId.isNotEmpty ? selectedMemberId : null,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person_outline),
                       ),
-                      items: widget.project.members.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                      onChanged: (v) => setStateDialog(() => selectedMember = v!),
+                      items: _projectMemberIds.map((id) {
+                        final name = _memberNames[id] ?? id;
+                        return DropdownMenuItem(value: id, child: Text(name));
+                      }).toList(),
+                      onChanged: (v) => setStateDialog(() => selectedMemberId = v!),
+                      validator: (v) => v == null ? 'Please select a member' : null,
                     ),
                     const SizedBox(height: 16),
                     const Text('Deadline', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -215,13 +288,29 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         value: p,
                         child: Row(
                           children: [
-                            Icon(Icons.circle, size: 12, color: p == Priority.high ? AppColors.error : p == Priority.medium ? AppColors.warning : AppColors.info),
+                            Icon(Icons.circle, size: 12,
+                                color: p == Priority.high
+                                    ? AppColors.error
+                                    : p == Priority.medium
+                                    ? AppColors.warning
+                                    : AppColors.info),
                             const SizedBox(width: 8),
                             Text(p.name.toUpperCase()),
                           ],
                         ),
                       )).toList(),
                       onChanged: (v) => setStateDialog(() => selectedPriority = v!),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      initialValue: '0',
+                      decoration: const InputDecoration(
+                        labelText: 'Estimated Hours',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.timer_outlined),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) => estimatedHours = int.tryParse(v) ?? 0,
                     ),
                     const SizedBox(height: 16),
                     const Text('Tags', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -237,7 +326,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
-                onPressed: isTitleValid
+                onPressed: isTitleValid && selectedMemberId.isNotEmpty
                     ? () async {
                   if (_formKey.currentState!.validate()) {
                     final newTask = Task(
@@ -245,15 +334,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       projectId: widget.project.id,
                       title: titleController.text.trim(),
                       description: descController.text.trim(),
-                      assignedTo: selectedMember,
+                      assignedTo: selectedMemberId,
                       deadline: selectedDate,
                       priority: selectedPriority,
                       tags: selectedTags,
+                      estimatedHours: estimatedHours,
                     );
-                    await _dbHelper.insertTask(newTask);
-                    await _refreshLocalTasks();
-                    widget.onTasksChanged();
+                    await _supabase.from('tasks').insert(newTask.toJson());
+                    await widget.onRefresh();
                     Navigator.pop(ctx);
+                    setState(() {});
                   }
                 }
                     : null,
@@ -264,11 +354,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         },
       ),
     );
-  }
-
-  Future<void> _handleRefresh() async {
-    await _refreshLocalTasks();
-    widget.onTasksChanged();
   }
 
   @override
@@ -346,7 +431,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   icon: const Icon(Icons.timeline),
                   onPressed: () {
                     Navigator.push(
-                        context, MaterialPageRoute(builder: (_) => GanttChartScreen(project: widget.project, tasks: widget.tasks)));
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => GanttChartScreen(project: widget.project, tasks: widget.tasks)));
                   },
                   tooltip: 'View Timeline',
                 ),
@@ -374,6 +461,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     ...mainTasks.map((task) => _TaskWithSubtasksCard(
                       task: task,
                       allTasks: widget.tasks,
+                      memberNames: _memberNames,
                       onTap: () => _openTaskDetail(task),
                     )),
                 ]),
@@ -396,11 +484,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 class _TaskWithSubtasksCard extends StatelessWidget {
   final Task task;
   final List<Task> allTasks;
+  final Map<String, String> memberNames;
   final VoidCallback onTap;
 
   const _TaskWithSubtasksCard({
     required this.task,
     required this.allTasks,
+    required this.memberNames,
     required this.onTap,
   });
 
@@ -423,6 +513,7 @@ class _TaskWithSubtasksCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtasks = _getSubtasks();
     final isOverdue = task.deadline.isBefore(DateTime.now()) && !task.isCompleted;
+    final assigneeName = memberNames[task.assignedTo] ?? task.assignedTo;
 
     return Card(
       child: Column(
@@ -444,7 +535,7 @@ class _TaskWithSubtasksCard extends StatelessWidget {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("${task.assignedTo} • Due ${task.deadline.toString().split(' ')[0]}"),
+                Text("$assigneeName • Due ${task.deadline.toString().split(' ')[0]}"),
                 if (task.isCompleted && task.completedAt != null)
                   Text(
                     '✓ Completed ${DateFormat('MM/dd HH:mm').format(task.completedAt!)}',
@@ -469,6 +560,7 @@ class _TaskWithSubtasksCard extends StatelessWidget {
               title: Text('Subtasks (${subtasks.length})',
                   style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
               children: subtasks.map((sub) {
+                final subAssigneeName = memberNames[sub.assignedTo] ?? sub.assignedTo;
                 return ListTile(
                   dense: true,
                   leading: Icon(Icons.subdirectory_arrow_right, size: 18, color: AppColors.textSecondary),
@@ -480,7 +572,7 @@ class _TaskWithSubtasksCard extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    '${sub.assignedTo} • Due ${DateFormat.MMMd().format(sub.deadline)}',
+                    '$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}',
                     style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                   onTap: () {
@@ -492,10 +584,16 @@ class _TaskWithSubtasksCard extends StatelessWidget {
                           project: null,
                           allTasks: allTasks,
                           onTaskUpdated: (updated) async {
-                            await DatabaseHelper().updateTask(updated);
+                            await Supabase.instance.client
+                                .from('tasks')
+                                .update(updated.toJson())
+                                .eq('id', updated.id);
                           },
                           onTaskDeleted: () async {
-                            await DatabaseHelper().deleteTask(sub.id);
+                            await Supabase.instance.client
+                                .from('tasks')
+                                .delete()
+                                .eq('id', sub.id);
                           },
                         ),
                       ),

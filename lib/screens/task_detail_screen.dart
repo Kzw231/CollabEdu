@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/project.dart';
 import '../models/task.dart';
 import '../models/comment.dart';
-import '../services/database_helper.dart';
+import '../services/current_user.dart';
 import '../widgets/tag_selector.dart';
 import '../theme.dart';
 
@@ -29,7 +30,7 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
-  final _dbHelper = DatabaseHelper();
+  final _supabase = Supabase.instance.client;
   final _commentController = TextEditingController();
   late Task _task;
   List<Comment> _comments = [];
@@ -39,7 +40,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   late TextEditingController _titleController;
   late TextEditingController _descController;
-  late String _selectedMember;
+  late String _selectedMemberId;
   late DateTime _selectedStartDate;
   late DateTime _selectedDeadline;
   late Priority _selectedPriority;
@@ -47,22 +48,85 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   late int _estimatedHours;
   late List<String> _selectedTags;
 
+  List<String> _memberIds = [];
+  Map<String, String> _memberNames = {};
+
   @override
   void initState() {
     super.initState();
     _task = widget.task;
     _loadComments();
     _loadSubtasks();
+    _loadProjectMembers();
+  }
+
+  Future<void> _loadProjectMembers() async {
+    if (widget.project == null) return;
+    try {
+      final links = await _supabase
+          .from('project_members')
+          .select('member_id')
+          .eq('project_id', widget.project!.id);
+      final ids = (links as List).map((e) => e['member_id'] as String).toList();
+      if (ids.isEmpty) {
+        setState(() {
+          _memberIds = [];
+          _memberNames.clear();
+        });
+        return;
+      }
+      final members = await _supabase
+          .from('members')
+          .select('id, name')
+          .inFilter('id', ids);
+      final map = <String, String>{};
+      for (final m in (members as List)) {
+        map[m['id']] = m['name'] ?? m['id'];
+      }
+      setState(() {
+        _memberIds = ids;
+        _memberNames = map;
+      });
+    } catch (e) {
+      setState(() {
+        _memberIds = [];
+        _memberNames.clear();
+      });
+    }
   }
 
   Future<void> _loadComments() async {
-    final comments = await _dbHelper.getCommentsForTask(_task.id);
-    setState(() => _comments = comments);
+    try {
+      final response = await _supabase
+          .from('comments')
+          .select('*')
+          .eq('task_id', _task.id)
+          .order('created_at');
+      setState(() {
+        _comments = (response as List)
+            .map((json) => Comment.fromJson(json as Map<String, dynamic>))
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading comments: $e');
+    }
   }
 
   Future<void> _loadSubtasks() async {
-    final subtasks = await _dbHelper.getSubtasks(_task.id);
-    setState(() => _subtasks = subtasks);
+    try {
+      final response = await _supabase
+          .from('tasks')
+          .select('*')
+          .eq('parent_task_id', _task.id)
+          .order('created_at');
+      setState(() {
+        _subtasks = (response as List)
+            .map((json) => Task.fromJson(json as Map<String, dynamic>))   // ✅ 修正：dynamic 小写
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading subtasks: $e');
+    }
   }
 
   Future<void> _addComment() async {
@@ -70,18 +134,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final comment = Comment(
       id: const Uuid().v4(),
       taskId: _task.id,
-      author: 'You',
+      author: CurrentUser.name ?? CurrentUser.email ?? 'You',
       content: _commentController.text.trim(),
     );
-    await _dbHelper.insertComment(comment);
-    _commentController.clear();
-    _loadComments();
+    try {
+      await _supabase.from('comments').insert(comment.toJson());
+      _commentController.clear();
+      await _loadComments();
+      setState(() {});
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add comment: $e')),
+      );
+    }
   }
 
   void _initEditControllers() {
     _titleController = TextEditingController(text: _task.title);
     _descController = TextEditingController(text: _task.description);
-    _selectedMember = _task.assignedTo;
+    _selectedMemberId = _task.assignedTo;
     _selectedStartDate = _task.startDate;
     _selectedDeadline = _task.deadline;
     _selectedPriority = _task.priority;
@@ -96,7 +167,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     _task.title = _titleController.text.trim();
     _task.description = _descController.text.trim();
-    _task.assignedTo = _selectedMember;
+    _task.assignedTo = _selectedMemberId;
     _task.startDate = _selectedStartDate;
     _task.deadline = _selectedDeadline;
     _task.priority = _selectedPriority;
@@ -111,24 +182,27 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       _task.completedAt = null;
     }
 
-    final existing = await _dbHelper.getTaskById(_task.id);
-    if (existing == null) {
-      await _dbHelper.insertTask(_task);
-    } else {
-      await _dbHelper.updateTask(_task);
+    try {
+      await _supabase.from('tasks').update(_task.toJson()).eq('id', _task.id);
+      widget.onTaskUpdated(_task);
+      setState(() => _isEditing = false);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save task: $e')),
+      );
     }
-
-    widget.onTaskUpdated(_task);
-    setState(() => _isEditing = false);
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final projectDeadline = widget.project?.deadline ?? DateTime(2100);
+    final initialDate = isStart ? _selectedStartDate : _selectedDeadline;
+    final firstDate = isStart ? DateTime(2020) : _selectedStartDate;
+    final lastDate = isStart ? _selectedDeadline : projectDeadline;
     final picked = await showDatePicker(
       context: context,
-      firstDate: DateTime(2020),
-      lastDate: projectDeadline,
-      initialDate: isStart ? _selectedStartDate : _selectedDeadline,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      initialDate: initialDate,
     );
     if (picked != null) {
       setState(() {
@@ -155,9 +229,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
     );
     if (confirm == true) {
-      await _dbHelper.deleteTask(_task.id);
-      widget.onTaskDeleted();
-      Navigator.pop(context);
+      try {
+        await _supabase.from('tasks').delete().eq('id', _task.id);
+        widget.onTaskDeleted();
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete task: $e')),
+        );
+      }
     }
   }
 
@@ -166,12 +246,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     _task.isCompleted = newStatus;
     _task.progressPercent = newStatus ? 100 : 0;
     _task.completedAt = newStatus ? DateTime.now() : null;
-    await _dbHelper.updateTask(_task);
-    widget.onTaskUpdated(_task);
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(newStatus ? 'Task marked as complete' : 'Task reopened')),
-    );
+    try {
+      await _supabase.from('tasks').update(_task.toJson()).eq('id', _task.id);
+      widget.onTaskUpdated(_task);
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(newStatus ? 'Task marked as complete' : 'Task reopened')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update task: $e')),
+      );
+    }
   }
 
   Future<void> _startTask() async {
@@ -179,8 +265,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     setState(() {
       _task.actualStartDate = DateTime.now();
     });
-    await _dbHelper.updateTask(_task);
-    widget.onTaskUpdated(_task);
+    try {
+      await _supabase.from('tasks').update({
+        'actual_start_date': _task.actualStartDate!.toIso8601String(),
+      }).eq('id', _task.id);
+      widget.onTaskUpdated(_task);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to start task: $e')),
+      );
+    }
   }
 
   Future<void> _showAddSubtaskDialog() async {
@@ -234,7 +328,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       priority: selectedPriority,
                       parentTaskId: _task.id,
                     );
-                    await _dbHelper.insertTask(subtask);
+                    await _supabase.from('tasks').insert(subtask.toJson());
                     _loadSubtasks();
                     Navigator.pop(ctx);
                   }
@@ -258,12 +352,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           project: widget.project,
           allTasks: widget.allTasks,
           onTaskUpdated: (updated) async {
-            await _dbHelper.updateTask(updated);
+            await _supabase.from('tasks').update(updated.toJson()).eq('id', updated.id);
             _loadSubtasks();
             widget.onTaskUpdated(_task);
           },
           onTaskDeleted: () async {
-            await _dbHelper.deleteTask(subtask.id);
+            await _supabase.from('tasks').delete().eq('id', subtask.id);
             _loadSubtasks();
             widget.onTaskUpdated(_task);
           },
@@ -293,6 +387,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final subtaskProgress = _subtasks.isEmpty ? 0.0 : completedSubtasks / _subtasks.length;
     final bool isMainTask = _task.parentTaskId == null;
     final projectName = widget.project?.name ?? _findProjectName();
+    final assigneeName = _memberNames[_task.assignedTo] ?? _task.assignedTo;
 
     return CustomScrollView(
       slivers: [
@@ -396,7 +491,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     children: [
                       const Text('Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 12),
-                      _buildOverviewGrid(),
+                      _buildOverviewGrid(assigneeName),
                     ],
                   ),
                 ),
@@ -522,18 +617,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         else
                           ExpansionTile(
                             title: Text('View Subtasks (${_subtasks.length})'),
-                            children: _subtasks.map((sub) => ListTile(
-                              dense: true,
-                              leading: Icon(Icons.subdirectory_arrow_right, size: 18, color: AppColors.textSecondary),
-                              title: Text(
-                                sub.title,
-                                style: TextStyle(
-                                  decoration: sub.isCompleted ? TextDecoration.lineThrough : null,
+                            children: _subtasks.map((sub) {
+                              final subAssigneeName = _memberNames[sub.assignedTo] ?? sub.assignedTo;
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(Icons.subdirectory_arrow_right, size: 18, color: AppColors.textSecondary),
+                                title: Text(
+                                  sub.title,
+                                  style: TextStyle(
+                                    decoration: sub.isCompleted ? TextDecoration.lineThrough : null,
+                                  ),
                                 ),
-                              ),
-                              subtitle: Text('${sub.assignedTo} • Due ${DateFormat.MMMd().format(sub.deadline)}'),
-                              onTap: () => _openSubtaskDetail(sub),
-                            )).toList(),
+                                subtitle: Text('$subAssigneeName • Due ${DateFormat.MMMd().format(sub.deadline)}'),
+                                onTap: () => _openSubtaskDetail(sub),
+                              );
+                            }).toList(),
                           ),
                       ],
                     ),
@@ -622,7 +720,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return widget.project?.name ?? 'Unknown Project';
   }
 
-  Widget _buildOverviewGrid() {
+  Widget _buildOverviewGrid(String assigneeName) {
     final statusColor = _task.isCompleted ? AppColors.success : AppColors.warning;
     final priorityColor = _task.priority == Priority.high
         ? AppColors.error
@@ -636,14 +734,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             Expanded(child: _buildOverviewItem('Status', _task.isCompleted ? 'Completed' : 'Pending', Icons.flag, statusColor)),
             const SizedBox(width: 16),
-            Expanded(
-                child: _buildOverviewItem('Priority', _task.priority.name.toUpperCase(), Icons.priority_high, priorityColor)),
+            Expanded(child: _buildOverviewItem('Priority', _task.priority.name.toUpperCase(), Icons.priority_high, priorityColor)),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildOverviewItem('Assigned to', _task.assignedTo, Icons.person)),
+            Expanded(child: _buildOverviewItem('Assigned to', assigneeName, Icons.person)),
             const SizedBox(width: 16),
             Expanded(
               child: _buildOverviewItem(
@@ -744,9 +841,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedMember,
-              items: widget.project?.members.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList() ?? [],
-              onChanged: (v) => setState(() => _selectedMember = v!),
+              value: _selectedMemberId,
+              items: _memberIds.map((id) {
+                final name = _memberNames[id] ?? id;
+                return DropdownMenuItem(value: id, child: Text(name));
+              }).toList(),
+              onChanged: (v) => setState(() => _selectedMemberId = v!),
               decoration: const InputDecoration(labelText: 'Assign to', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
@@ -825,7 +925,8 @@ class _CommentTile extends StatelessWidget {
         children: [
           CircleAvatar(
             backgroundColor: AppColors.primaryLight,
-            child: Text(comment.author[0], style: TextStyle(color: AppColors.primary)),
+            child: Text(comment.author.isNotEmpty ? comment.author[0] : '?',
+                style: TextStyle(color: AppColors.primary)),
           ),
           const SizedBox(width: 12),
           Expanded(

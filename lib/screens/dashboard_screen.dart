@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/project.dart';
+import '../models/project_form_result.dart';
 import '../models/task.dart';
-import '../services/database_helper.dart';
+import '../services/current_user.dart';
 import '../theme.dart';
 import 'stream_tab.dart';
-import 'work_tab.dart';
 import 'people_tab.dart';
 import 'grades_tab.dart';
 import 'create_project_screen.dart';
 import 'edit_project_screen.dart';
 import 'project_detail_screen.dart';
 import 'report_generator_screen.dart';
+import 'profile_screen.dart';
+import 'files_tab.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -24,45 +27,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Project> projects = [];
   List<Task> tasks = [];
   bool _isLoading = true;
+  bool _hideTabFab = false;
+  final _supabase = Supabase.instance.client;
 
-  final _dbHelper = DatabaseHelper();
+  final Map<String, int> _projectMemberCount = {};
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadCurrentMemberAndData();
   }
 
-  Future<void> _loadData() async {
-    try {
-      final loadedProjects = await _dbHelper.getAllProjects();
-      final loadedTasks = await _dbHelper.getAllTasks();
-      setState(() {
-        projects = loadedProjects;
-        tasks = loadedTasks;
-        _isLoading = false;
-      });
-    } catch (e) {
+  Future<void> _loadCurrentMemberAndData() async {
+    await _loadCurrentMember();
+    if (CurrentUser.memberId != null) {
+      await _loadData();
+    } else if (mounted) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading data: $e')),
+        const SnackBar(
+          content: Text('Failed to load user profile. Please log in again.'),
+        ),
       );
     }
   }
 
-  double getProgress(String projectId) {
-    final projectTasks = tasks.where((t) => t.projectId == projectId).toList();
-    if (projectTasks.isEmpty) return 0;
-    int completed = projectTasks.where((t) => t.isCompleted).length;
-    return completed / projectTasks.length;
+  Future<void> _loadCurrentMember() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    final response = await _supabase
+        .from('members')
+        .select('id, name, email')
+        .eq('auth_uid', user.id)
+        .maybeSingle();
+    if (response != null) {
+      CurrentUser.memberId = response['id'];
+      CurrentUser.name = response['name'];
+      CurrentUser.email = response['email'];
+    }
   }
 
-  void deleteProject(Project p) async {
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      if (CurrentUser.memberId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final memberProjects = await _supabase
+          .from('project_members')
+          .select('project_id')
+          .eq('member_id', CurrentUser.memberId!);
+      final projectIds = memberProjects.map<String>((row) => row['project_id']).toList();
+
+      if (projectIds.isEmpty) {
+        setState(() {
+          projects = [];
+          tasks = [];
+          _projectMemberCount.clear();
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final projectsData = await _supabase
+          .from('projects')
+          .select('*')
+          .inFilter('id', projectIds);
+      projects = projectsData.map((json) => Project.fromJson(json)).toList();
+
+      for (final project in projects) {
+        final countResp = await _supabase
+            .from('project_members')
+            .select('*')
+            .eq('project_id', project.id)
+            .count(CountOption.exact);
+        _projectMemberCount[project.id] = countResp.count ?? 0;
+      }
+
+      final tasksData = await _supabase
+          .from('tasks')
+          .select('*')
+          .inFilter('project_id', projectIds);
+      tasks = tasksData.map((json) => Task.fromJson(json)).toList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  int getProjectMemberCount(Project project) {
+    return _projectMemberCount[project.id] ?? 0;
+  }
+
+  Future<void> deleteProject(Project project) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Delete project"),
-        content: Text("Are you sure you want to delete '${p.name}'?"),
+        content: Text("Are you sure you want to delete '${project.name}'?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -77,30 +146,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (confirm != true) return;
 
-    await _dbHelper.deleteProject(p.id);
-    setState(() {
-      tasks.removeWhere((t) => t.projectId == p.id);
-      projects.remove(p);
-    });
+    try {
+      final filesResp = await _supabase
+          .from('files')
+          .select('storage_path')
+          .eq('project_id', project.id);
+      final paths = (filesResp as List).map((f) => f['storage_path'] as String).toList();
+      if (paths.isNotEmpty) {
+        await _supabase.storage.from('project_files').remove(paths);
+      }
+
+      await _supabase.from('projects').delete().eq('id', project.id);
+
+      if (mounted) {
+        setState(() {
+          projects.remove(project);
+          tasks.removeWhere((t) => t.projectId == project.id);
+          _projectMemberCount.remove(project.id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting project: $e')),
+        );
+      }
+    }
   }
 
-  void editProject(Project p) async {
-    final updatedProject = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EditProjectScreen(project: p)),
-    );
-    if (updatedProject != null) {
-      await _dbHelper.updateProject(updatedProject);
-      await _dbHelper.updateTasksForProject(updatedProject);
-      final updatedTasks = await _dbHelper.getAllTasks();
-      setState(() {
-        int index = projects.indexWhere((x) => x.id == p.id);
-        projects[index] = updatedProject;
-        tasks = updatedTasks;
+  Future<void> _syncProjectMembers(String projectId, List<String> memberIds) async {
+    final desired = memberIds.toSet();
+    final me = CurrentUser.memberId;
+    if (me != null) desired.add(me);
+
+    final rows = await _supabase
+        .from('project_members')
+        .select('member_id')
+        .eq('project_id', projectId);
+    final existing = (rows as List).map((e) => e['member_id'] as String).toSet();
+
+    for (final id in desired.difference(existing)) {
+      await _supabase.from('project_members').insert({
+        'project_id': projectId,
+        'member_id': id,
+        'role': id == me ? 'admin' : 'member',
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Project updated & tasks synced")),
+    }
+    for (final id in existing.difference(desired)) {
+      if (id == me) continue;
+      await _supabase
+          .from('project_members')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('member_id', id);
+    }
+    _projectMemberCount[projectId] = desired.length;
+  }
+
+  Future<void> editProject(Project project) async {
+    setState(() => _hideTabFab = true);
+    ProjectFormResult? result;
+    try {
+      result = await Navigator.push<ProjectFormResult?>(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => EditProjectScreen(
+            project: project,
+            existingProjects: projects,
+          ),
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _hideTabFab = false);
+    }
+
+    if (result != null) {
+      try {
+        final updatedProject = result.project;
+        final memberIds = result.memberIds;
+        await _supabase
+            .from('projects')
+            .update(updatedProject.toJson())
+            .eq('id', updatedProject.id);
+        await _syncProjectMembers(updatedProject.id, memberIds);
+
+        final index = projects.indexWhere((p) => p.id == updatedProject.id);
+        if (index != -1) {
+          setState(() {
+            projects[index] = updatedProject;
+            _projectMemberCount[updatedProject.id] = memberIds.length;
+          });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Project updated")),
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error updating project: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -110,49 +260,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
       MaterialPageRoute(
         builder: (_) => ProjectDetailScreen(
           project: project,
-          tasks: tasks,
-          onTasksChanged: _refreshTasks,
+          tasks: tasks.where((t) => t.projectId == project.id).toList(),
+          onRefresh: _loadData,
         ),
       ),
     );
-    _refreshTasks();
-  }
-
-  Future<void> _refreshTasks() async {
-    final updatedTasks = await _dbHelper.getAllTasks();
-    setState(() {
-      tasks = updatedTasks;
-    });
   }
 
   Future<void> _createProject() async {
-    final newProject = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CreateProjectScreen(existingProjects: projects),
-      ),
-    );
-    if (newProject != null) {
-      await _dbHelper.insertProject(newProject);
-      setState(() => projects.add(newProject));
+    if (CurrentUser.memberId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Project created")),
+        const SnackBar(
+          content: Text('User profile not loaded. Please restart app.'),
+        ),
       );
+      return;
+    }
+
+    setState(() => _hideTabFab = true);
+    ProjectFormResult? result;
+    try {
+      result = await Navigator.push<ProjectFormResult?>(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => CreateProjectScreen(existingProjects: projects),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _hideTabFab = false);
+    }
+
+    if (result != null) {
+      try {
+        final newProject = result.project;
+        final memberIds = result.memberIds;
+        final projectRow = Map<String, dynamic>.from(newProject.toJson());
+        if ((projectRow['created_by'] as String?)?.isEmpty ?? true) {
+          projectRow['created_by'] = CurrentUser.memberId;
+        }
+
+        final inserted = await _supabase.from('projects').insert(projectRow).select();
+        final createdProject = Project.fromJson(inserted.first);
+
+        for (final mid in memberIds) {
+          await _supabase.from('project_members').insert({
+            'project_id': createdProject.id,
+            'member_id': mid,
+            'role': mid == CurrentUser.memberId ? 'admin' : 'member',
+          });
+        }
+
+        if (mounted) {
+          setState(() {
+            projects.add(createdProject);
+            _projectMemberCount[createdProject.id] = memberIds.length;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Project created")),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error creating project: $e')),
+          );
+        }
+      }
     }
   }
 
   Widget? _buildFAB() {
-    switch (_selectedIndex) {
-      case 0:
-      case 1:
-        return FloatingActionButton.extended(
-          onPressed: _createProject,
-          icon: const Icon(Icons.add),
-          label: const Text('Create project'),
-        );
-      default:
-        return null;
+    if (_hideTabFab) return null;
+    if (_selectedIndex == 0) {
+      return FloatingActionButton.extended(
+        onPressed: _createProject,
+        icon: const Icon(Icons.add),
+        label: const Text('Create project'),
+      );
     }
+    return null;
   }
 
   @override
@@ -171,12 +358,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onProjectLongPress: deleteProject,
         onProjectDoubleTap: editProject,
         onRefresh: _loadData,
-      ),
-      WorkTab(
-        projects: projects,
-        tasks: tasks,
-        onProjectTap: _navigateToProjectDetail,
-        onRefresh: _loadData,
+        getMemberCount: getProjectMemberCount,
       ),
       PeopleTab(
         projects: projects,
@@ -187,7 +369,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         tasks: tasks,
         onRefresh: _loadData,
       ),
+      FilesTab(
+        projects: projects,
+        onRefresh: _loadData,
+        getMemberCount: getProjectMemberCount,
+      ),
     ];
+
+    final maxTab = tabs.length - 1;
+    final tabIndex = _selectedIndex.clamp(0, maxTab);
 
     return Scaffold(
       appBar: AppBar(
@@ -199,20 +389,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ReportGeneratorScreen(projects: projects, tasks: tasks),
+                  builder: (_) => ReportGeneratorScreen(
+                    projects: projects,
+                    tasks: tasks,
+                  ),
                 ),
               );
             },
             tooltip: 'Generate Report',
           ),
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            },
+            tooltip: 'Profile',
+          ),
         ],
       ),
       body: IndexedStack(
-        index: _selectedIndex,
+        index: tabIndex,
         children: tabs,
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
+        currentIndex: tabIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
@@ -220,46 +423,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         showUnselectedLabels: true,
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
         unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400),
-        items: [
+        items: const [
           BottomNavigationBarItem(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                _selectedIndex == 0 ? Icons.home : Icons.home_outlined,
-                key: ValueKey(_selectedIndex == 0),
-              ),
-            ),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
             label: 'Stream',
           ),
           BottomNavigationBarItem(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                _selectedIndex == 1 ? Icons.assignment : Icons.assignment_outlined,
-                key: ValueKey(_selectedIndex == 1),
-              ),
-            ),
-            label: 'Work',
-          ),
-          BottomNavigationBarItem(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                _selectedIndex == 2 ? Icons.people : Icons.people_outline,
-                key: ValueKey(_selectedIndex == 2),
-              ),
-            ),
+            icon: Icon(Icons.people_outline),
+            activeIcon: Icon(Icons.people),
             label: 'People',
           ),
           BottomNavigationBarItem(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                _selectedIndex == 3 ? Icons.grade : Icons.grade_outlined,
-                key: ValueKey(_selectedIndex == 3),
-              ),
-            ),
+            icon: Icon(Icons.grade_outlined),
+            activeIcon: Icon(Icons.grade),
             label: 'Grades',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.folder_outlined),
+            activeIcon: Icon(Icons.folder),
+            label: 'Files',
           ),
         ],
       ),
