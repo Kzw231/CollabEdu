@@ -24,13 +24,12 @@ class _ProjectMemberRow {
 class PeopleTab extends StatefulWidget {
   final List<Project> projects;
   final Future<void> Function() onRefresh;
-  final int Function(Project) getMemberCount;   // ✅ 新增
-
+  final int Function(Project) getMemberCount;   
   const PeopleTab({
     super.key,
     required this.projects,
     required this.onRefresh,
-    required this.getMemberCount,               // ✅ 新增
+    required this.getMemberCount,             
   });
 
   @override
@@ -312,7 +311,7 @@ class _PeopleTabState extends State<PeopleTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Removed ${member.name} from the project')),
         );
-        await _loadMembersForCurrent(); // ✅ only update local list
+        await _loadMembersForCurrent();
       }
     } catch (e) {
       if (mounted) {
