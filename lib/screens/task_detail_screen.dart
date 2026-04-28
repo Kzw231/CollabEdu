@@ -380,7 +380,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  // ---------- Detail View (优化按钮布局) ----------
   Widget _buildDetailView() {
     final completedSubtasks = _subtasks.where((s) => s.isCompleted).length;
     final subtaskProgress =
@@ -442,7 +441,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              // 操作按钮卡片（自适应布局防止溢出）
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
@@ -450,7 +448,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Overview 卡片
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -465,7 +462,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // 进度卡片
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -522,7 +518,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // 描述
               if (_task.description.isNotEmpty)
                 Card(
                   child: Padding(
@@ -552,7 +547,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   ),
                 ),
               const SizedBox(height: 16),
-              // 子任务
               if (isMainTask)
                 Card(
                   child: Padding(
@@ -616,7 +610,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   ),
                 ),
               if (isMainTask) const SizedBox(height: 16),
-              // 标签
               if (_task.tags.isNotEmpty)
                 Card(
                   child: Padding(
@@ -643,7 +636,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   ),
                 ),
               if (_task.tags.isNotEmpty) const SizedBox(height: 16),
-              // 评论
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -700,10 +692,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  // 专门提取的操作按钮构建方法，处理所有状态下的按钮布局
   Widget _buildActionButtons() {
     if (!_task.isCompleted && _task.actualStartDate == null) {
-      // 未开始
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
@@ -718,7 +708,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ),
       );
     } else if (!_task.isCompleted && _task.actualStartDate != null) {
-      // 进行中
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
@@ -733,7 +722,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ),
       );
     } else {
-      // 已完成
       return Column(
         children: [
           SizedBox(
@@ -767,7 +755,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  // ---------- Edit Form (已移除 Estimated Hours) ----------
   Widget _buildEditForm() {
     return Scaffold(
       appBar: AppBar(
