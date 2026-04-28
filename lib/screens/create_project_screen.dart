@@ -54,7 +54,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     if (_isAdding) return;
     _isAdding = true;
     try {
-      // ⬇️ your existing code (lookup, add to _addedMembers, etc.) stays exactly the same ⬇️
       final raw = _inviteController.text.trim();
       if (raw.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +87,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Added ${row['name'] ?? id}')),
       );
-      // ⬆️ your existing code ends here ⬆️
     } finally {
       _isAdding = false;
     }
@@ -157,7 +155,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       name: nameController.text.trim(),
       description: descController.text.trim(),
       deadline: selectedDate!,
-      createdBy: CurrentUser.memberId!,   // add this
+      createdBy: CurrentUser.memberId!,   
       members: selectedIds,
     );
 
