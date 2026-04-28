@@ -24,8 +24,14 @@ class _ProjectMemberRow {
 class PeopleTab extends StatefulWidget {
   final List<Project> projects;
   final Future<void> Function() onRefresh;
+  final int Function(Project) getMemberCount;   // ✅ 新增
 
-  const PeopleTab({super.key, required this.projects, required this.onRefresh});
+  const PeopleTab({
+    super.key,
+    required this.projects,
+    required this.onRefresh,
+    required this.getMemberCount,               // ✅ 新增
+  });
 
   @override
   State<PeopleTab> createState() => _PeopleTabState();
@@ -357,7 +363,7 @@ class _PeopleTabState extends State<PeopleTab> {
                   _loadMembersForCurrent();
                 }
               },
-              memberCount: _rows.length,
+              getMemberCount: widget.getMemberCount,
             ),
           ),
           Padding(
