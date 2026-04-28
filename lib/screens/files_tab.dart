@@ -81,7 +81,7 @@ class _FilesTabState extends State<FilesTab> {
             onChanged: (p) {
               if (p != null) setState(() => _selected = p);
             },
-            memberCount: memberCount,
+            getMemberCount: (proj) => widget.getMemberCount(proj),
           ),
         ),
         Expanded(
